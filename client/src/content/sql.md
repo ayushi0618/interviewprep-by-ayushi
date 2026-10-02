@@ -503,6 +503,27 @@ If the server crashes *between* the two updates and you had no transaction, ₹5
 
 Say it like this: "I wrap multi-step writes in a transaction so a failure mid-way rolls everything back — the database is never left half-updated."
 
+### Each letter prevents one specific disaster
+
+| Letter | Property | The disaster it prevents |
+|---|---|---|
+| **A** | Atomicity | The ₹500 leaves A but never reaches B — a transfer stranded half-way |
+| **C** | Consistency | A rule breaking silently: a balance below zero, or two accounts whose total no longer adds up |
+| **I** | Isolation | Two transfers reading the same half-updated balance at once and spending the same money twice |
+| **D** | Durability | You saw "transfer successful," the server crashed a second later, and the money was gone anyway |
+
+The two transfer lines again, with the safety net shown honestly this time — watch what happens when the *second* line fails:
+
+```sql
+BEGIN;
+UPDATE accounts SET balance = balance - 500 WHERE id = 'A';  -- fine: A is now 1500
+UPDATE accounts SET balance = balance + 500 WHERE id = 'B';  -- ERROR: account B was closed
+ROLLBACK;  -- undo everything: A returns to 2000, as if you never started
+```
+
+That `ROLLBACK` is Atomicity you can watch: either both updates land (you `COMMIT`) or neither does (you `ROLLBACK`) — there is no third outcome where only the debit survives. Run the debit alone in a practice database, roll back, and re-check the balance; seeing ₹2,000 come back makes the word permanent.
+
+
 ## 🪟 6C. Window Functions — rank without collapsing rows
 
 GROUP BY collapses each group into one row; a window function keeps every row and *adds* a computed column. Simplest useful case: number students within each course by marks.
@@ -514,6 +535,36 @@ FROM students;
 ```
 
 `PARTITION BY course` restarts the numbering per course; `ORDER BY marks DESC` puts the topper at 1. The output has the same row count as the input — you can now filter `WHERE rank_in_course <= 3` for "top 3 per course," a classic interview favourite that GROUP BY alone cannot express. Reach for window functions when the question says "per group, but keep the individual rows."
+
+### Three ranking functions, one tiny table
+
+The only real difference between them shows up on a **tie**, so watch for the tied row. One course, four students:
+
+| name | marks |
+|---|---|
+| Ayushi | 92 |
+| Rahul | 88 |
+| Sneha | 88 |
+| Kabir | 75 |
+
+Run each function with `OVER (ORDER BY marks DESC)` and compare the column it adds:
+
+| name | marks | ROW_NUMBER() | RANK() | DENSE_RANK() |
+|---|---|---|---|---|
+| Ayushi | 92 | 1 | 1 | 1 |
+| Rahul | 88 | 2 | 2 | 2 |
+| Sneha | 88 | 3 | 2 | 2 |
+| Kabir | 75 | 4 | 4 | 3 |
+
+- **ROW_NUMBER()** — every row gets its own number, tie or not (Rahul 2, Sneha 3, in whichever order). Pick it when exactly one winner is needed.
+- **RANK()** — tied rows share a number, then the count *skips*: two students at rank 2 means nobody is rank 3, so Kabir is 4. Think shared medals.
+- **DENSE_RANK()** — tied rows share a number, but nothing is skipped: Kabir is 3, and the ranks stay "dense" (1, 2, 2, 3).
+
+> [!TIP]
+> **Top-3-per-group, written safely:** a window column does not exist yet while `WHERE` runs, so wrap it once and filter outside: `SELECT * FROM (SELECT name, course, ROW_NUMBER() OVER (PARTITION BY course ORDER BY marks DESC) AS rn FROM students) ranked WHERE rn <= 3;` Swap in `RANK()` when two tied students should *both* count as rank 2.
+
+Say it like this: "GROUP BY answers 'one row per group'; a window function answers 'every row, plus its rank inside its group' — that is why topper-per-class questions need windows, not groups."
+
 
 
 ## 🧱 7. Normalization Recap
@@ -544,10 +595,34 @@ SELECT o.id, c.name, c.city, o.product
 FROM orders o JOIN customers c ON c.id = o.customer_id;
 ```
 
+### The same fix, one normal form at a time
+
+Start from one honest beginner table — enrollments with everything stuffed in:
+
+`enrollments(student_id, student_name, course_id, course_title, skills)` — one row like `(1, 'Ayushi', 7, 'Databases', 'Java, Python')`.
+
+- **To 1NF:** a cell holds a *list* (`'Java, Python'`), so split it — one row per skill (or a separate skills table). Now every cell holds one value.
+- **To 2NF:** the key is `(student_id, course_id)`, but `student_name` depends on the student alone and `course_title` on the course alone — each repeats on every matching row. Move them out: `students(id, name)` and `courses(id, title)`; the enrollment keeps only the two ids.
+- **To 3NF:** suppose the row also carries the course's department. That depends on the course, not on the enrollment — one more hop away from the key. It belongs inside `courses`, not here.
+
+End state: `students`, `courses`, `enrollments(student_id, course_id)`, and skills stored one per row. Keep the old sentence in your pocket — it *is* the three forms in one breath: "every column depends on the key, the whole key, and nothing but the key."
+
+
 ## 🏷️ 8. Naming Trap: SQL vs MySQL
 
 > [!WARNING]
 > **SQL is a language; MySQL is a product.** SQL is the standard language for relational databases. MySQL, PostgreSQL, SQLite, SQL Server all *speak* SQL with small dialect differences (`LIMIT` vs `TOP`). "I know MySQL" = one dialect; the concepts transfer everywhere.
+
+One line per name, so the two stop blurring:
+
+- **SQL** — the *language*: the `SELECT … JOIN … GROUP BY` grammar every relational database shares.
+- **MySQL** — a *product* that speaks SQL (free, very common; spells paging as `LIMIT`).
+- **PostgreSQL** — another product speaking the same language, stricter about types and rich in features.
+- **SQLite** — a tiny product that keeps the whole database in one file; what many apps and demos actually run.
+
+> [!TIP]
+> **What to say in interviews:** list **SQL** as the skill, and name the product you actually used next to the project ("Built with SQL (MySQL)"). If an interviewer works in a different dialect, say: "I write MySQL spelling — the concepts transfer, only small syntax differs." Naming the difference calmly scores better than claiming every product is identical.
+
 
 ---
 

@@ -39,6 +39,24 @@ Three habits make any estimate sound senior: state the read/write ratio, convert
 
 🎤 What the interviewer actually asks: "Design a URL shortener." They are really asking: *can you break a vague problem into pieces and make sensible trade-offs?* The four steps above are the whole game at fresher level.
 
+### The four steps on a clock — a 90-second chat-app sketch
+
+Watch the steps fire in order on a fresh prompt, "Design a simple chat app":
+
+```text
+Clarify (≈20 sec): "1-to-1 or groups? Must messages wait for an offline user,
+or is best-effort fine? Roughly how many users?"
+Estimate (≈20 sec): "Say 10,000 users, 20 messages a day each — 200,000 small
+messages a day. One server and one database are honestly enough to start."
+Boxes (≈30 sec): client → API server → database; one WebSocket per online user
+so the server can push. (The full flow lives in Section 4 — here you only name the boxes.)
+Deep-dive (≈20 sec): pick ONE: "The part I'd dig into is delivery — I save each
+message before pushing it, so a crash mid-send loses nothing."
+```
+
+Notice what did *not* happen: no load balancer, no sharding, no second database — because the estimate said 200k tiny messages a day. If the interviewer then says "now make it a million users," *that* is when the extra boxes earn their place. The flow is the skill; the boxes are just vocabulary.
+
+
 ---
 
 ## 🧰 2. The Box Vocabulary
@@ -258,6 +276,18 @@ Notice what is *not* on the list: rewriting into microservices. Scaling is about
 > **The golden rule:** a simple design you can fully explain beats a complex diagram you memorised. If you can't say *why* a box exists, delete the box.
 
 A closing habit that ties this whole file together: after any design, volunteer your own bottleneck before the interviewer finds it. One honest sentence — "the single database is my limit today; if writes grow 100× I'd shard by user_id, and if reads grow I'd add replicas behind the cache" — converts every weakness into evidence you were thinking like an engineer the whole time. Interviewers remember candidates who grade themselves accurately.
+
+### How each mistake sounds from the other side of the table
+
+- **Over-engineering** — the interviewer hears: "this candidate adds machinery to look senior." *Say instead:* "At 1,000 users a day I'd run one server and one database, and I'd add a cache only when repeat reads show up in the numbers."
+- **Microservices on day one** — they hear: "this candidate has read about scale but never paid its cost" — every service boundary is a network call that can fail, time out, and need its own deployment. *Say instead:* "I'd keep one clean monolith and split a piece out only when it clearly outgrows the rest."
+- **Sketching before clarifying** — they hear: "give this person a vague ticket and they'll build the wrong thing beautifully." *Say instead:* spend the first two minutes on three questions — who uses it, what must it do, roughly how much traffic — and let the answers choose your boxes.
+- **"It scales infinitely"** — they hear a claim no system on earth can back. *Say instead:* volunteer the limit first: "My bottleneck is the single database; at 100× writes I'd shard by user, and reads are already behind a cache." Owning one limit beats hiding five.
+- **Explaining all five boxes deeply** — they hear the clock, not the candidate. *Say instead:* give every box one honest line, then spend your depth on the single part with a real trade-off — ID generation in a shortener, delivery order in chat.
+
+> [!TIP]
+> **The repair sentence:** whenever you catch yourself reaching for a fancy box, finish this sentence first — "I need this because my estimate says ___." If the blank stays empty, the box comes off the diagram.
+
 
 ---
 

@@ -1,14 +1,17 @@
 // StudyPlans — LeetCode-style study-plan cards + chapter checklists.
 //
 // No calendars, no deadlines: pick a plan (say "SQL 50"), work down its
-// chapters, tick items off. Reading a guide fully, or solving a sheet
-// problem, ticks the matching plan items BY ITSELF (see isPlanItemDone
-// in lib/progress.js) — those rows show a little "auto ✓" badge so you
-// know why they're already done. Everything can also be ticked by hand.
+// chapters, tick items off. Finishing the matching notes chapter, or
+// solving a sheet problem, ticks the matching plan items BY ITSELF (see
+// isPlanItemDone in lib/progress.js) — those rows show a little "auto ✓"
+// badge so you know why they're already done. Everything can also be
+// ticked by hand; section rows deep-link to their chapter.
 import { useMemo, useState } from 'react';
 import { PLANS, planItemCount } from '../data/plans';
+import { getTopic } from '../content/topics';
+import { resolveChapter } from '../lib/chapters.js';
 import { useProgress } from '../lib/progress.jsx';
-import { isPlanItemDone, isPlanItemChecked } from '../lib/progress';
+import { isPlanItemDone, isPlanItemChecked } from '../lib/progress.js';
 
 const TYPE_ICON = {
   article: '📖',
@@ -89,13 +92,18 @@ export default function StudyPlans({ onOpenArticle, onOpenProblem, onPractice, o
     setSelectedId(plan.id);
   };
 
-  // Where does clicking an item's label take you?
+  // Where does clicking an item's label take you? Section/article items
+  // deep-link to the exact chapter when the label resolves to one.
   const navigate = (item) => {
     switch (item.type) {
       case 'article':
-      case 'section':
-        if (item.ref) onOpenArticle?.(item.ref);
+      case 'section': {
+        if (!item.ref) break;
+        const topic = getTopic(item.ref);
+        const chapter = item.type === 'section' ? resolveChapter(topic.chapters, item.label) : null;
+        onOpenArticle?.(item.ref, chapter?.slug || undefined);
         break;
+      }
       case 'problem':
         if (item.ref) onOpenProblem?.(item.ref);
         break;

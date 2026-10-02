@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSandboxRunner, LEVEL_CLASS } from '../lib/runCode';
 import { loadSqlJs, createSeededDb, SEED_COLUMNS, SEED_ROWS } from '../lib/sqlEngine';
+import { ONLINE_LANGUAGES, getOnlineLanguage, executeOnline, onlineErrorMessage } from '../lib/onlineRunner';
 
 // Code Playground — a full-page "online compiler" for the notes.
 //   JavaScript mode → shared sandbox runner (lib/runCode.js): write JS,
@@ -10,7 +11,11 @@ import { loadSqlJs, createSeededDb, SEED_COLUMNS, SEED_ROWS } from '../lib/sqlEn
 //   SQL mode → shared sql.js engine (lib/sqlEngine.js) with the same
 //     seeded `students` table the SQL notes use. Queries run 100% in
 //     the browser; Reset rebuilds the database.
-// Switching languages keeps your work in both editors.
+//   Python / Java / C++ / C / TypeScript / Go / Rust → lib/onlineRunner.js
+//     sends the code to the free Wandbox runner (needs internet; the
+//     page says so — never paste secrets there). Optional stdin box
+//     feeds the program's input.
+// Switching languages keeps your work in every editor.
 
 const JS_SNIPPETS = [
   {
@@ -236,12 +241,21 @@ function CodeEditor({ value, onChange, onRunShortcut, ariaLabel }) {
 }
 
 export default function Playground() {
-  const [lang, setLang] = useState('js'); // 'js' | 'sql'
+  const [lang, setLang] = useState('js'); // 'js' | 'sql' | an ONLINE_LANGUAGES id
 
   // --- JavaScript state (shared sandbox runner) ---
   const runner = useSandboxRunner();
   const [jsSnippet, setJsSnippet] = useState(JS_SNIPPETS[0]);
   const [jsCode, setJsCode] = useState(JS_SNIPPETS[0].code);
+
+  // --- Online languages state (lib/onlineRunner.js) ---
+  const [onlineCode, setOnlineCode] = useState(() =>
+    Object.fromEntries(ONLINE_LANGUAGES.map((l) => [l.id, l.snippets[0].code])));
+  const [onlineSnipId, setOnlineSnipId] = useState(() =>
+    Object.fromEntries(ONLINE_LANGUAGES.map((l) => [l.id, l.snippets[0].id])));
+  const [stdin, setStdin] = useState('');
+  const [onlineRun, setOnlineRun] = useState({ status: 'idle' }); // idle | running | done | error
+  const onlineTokenRef = useRef(0);
 
   // --- SQL state (shared sql.js engine) ---
   const [sqlSnippet, setSqlSnippet] = useState(SQL_SNIPPETS[0]);
@@ -279,6 +293,33 @@ export default function Playground() {
 
   const loadJsSnippet = (snip) => { setJsSnippet(snip); setJsCode(snip.code); };
   const loadSqlSnippet = (snip) => { setSqlSnippet(snip); setSqlCode(snip.code); setSqlResults(null); setSqlError(''); };
+  const loadOnlineSnippet = (def, snip) => {
+    setOnlineSnipId((m) => ({ ...m, [def.id]: snip.id }));
+    setOnlineCode((m) => ({ ...m, [def.id]: snip.code }));
+    setOnlineRun({ status: 'idle' });
+  };
+
+  // Switching languages never throws work away; a fresh language gets a
+  // fresh output pane so results are never attributed to the wrong code.
+  const switchLang = (next) => {
+    if (next !== lang) setOnlineRun({ status: 'idle' });
+    setLang(next);
+  };
+
+  const runOnline = async () => {
+    const def = getOnlineLanguage(lang);
+    if (!def || onlineRun.status === 'running') return;
+    const token = ++onlineTokenRef.current;
+    setOnlineRun({ status: 'running', langLabel: def.label });
+    try {
+      const result = await executeOnline(def, onlineCode[def.id], stdin);
+      if (onlineTokenRef.current !== token) return; // a newer run owns the pane
+      setOnlineRun({ status: 'done', langLabel: def.label, result });
+    } catch (e) {
+      if (onlineTokenRef.current !== token) return;
+      setOnlineRun({ status: 'error', langLabel: def.label, message: onlineErrorMessage(e) });
+    }
+  };
 
   const runSql = () => {
     if (!dbRef.current) return;
@@ -301,8 +342,13 @@ export default function Playground() {
     }
   };
 
-  const snippets = lang === 'js' ? JS_SNIPPETS : SQL_SNIPPETS;
-  const activeSnippet = lang === 'js' ? jsSnippet : sqlSnippet;
+  const onlineLang = getOnlineLanguage(lang);
+  const snippets = lang === 'js' ? JS_SNIPPETS : lang === 'sql' ? SQL_SNIPPETS : onlineLang.snippets;
+  const activeSnippet = lang === 'js'
+    ? jsSnippet
+    : lang === 'sql'
+      ? sqlSnippet
+      : onlineLang.snippets.find((s) => s.id === onlineSnipId[lang]) || onlineLang.snippets[0];
   const sqlRowCount = sqlResults?.[0]?.values.length ?? 0;
 
   const btn = 'rounded-lg px-3.5 py-2 text-sm font-bold transition';
@@ -315,15 +361,20 @@ export default function Playground() {
       <h1 className="text-3xl md:text-4xl font-extrabold text-brand-900">▶ Code Playground</h1>
       <p className="text-slate-600 mt-2 max-w-3xl leading-relaxed">
         Don&apos;t just read the notes — <strong className="text-slate-800">write code and run it, right here</strong>.
-        JavaScript runs in a safe sandbox in your browser; SQL runs against a real SQLite database
+        JavaScript runs in a safe sandbox in your browser, and SQL runs against a real SQLite database
         (the same <code className="font-mono text-[0.85em] bg-brand-100 text-brand-900 px-1.5 py-0.5 rounded">students</code> table
-        from the notes). Nothing you type leaves your device.
+        from the notes) — those two never leave your device. Python, Java, C++, C, TypeScript, Go and Rust
+        run on the free <strong className="text-slate-800">Wandbox</strong> online runner, so they need internet —
+        great for practice, but don&apos;t paste anything secret there.
       </p>
 
       {/* Language switch */}
-      <div className="mt-6 inline-flex rounded-xl border border-brand-200 bg-white p-1 shadow-card">
-        <button type="button" className={langBtn(lang === 'js')} onClick={() => setLang('js')}>⚡ JavaScript</button>
-        <button type="button" className={langBtn(lang === 'sql')} onClick={() => setLang('sql')}>🗄️ SQL</button>
+      <div className="mt-6 flex flex-wrap gap-1 rounded-xl border border-brand-200 bg-white p-1 shadow-card max-w-full">
+        <button type="button" className={langBtn(lang === 'js')} onClick={() => switchLang('js')}>⚡ JavaScript</button>
+        <button type="button" className={langBtn(lang === 'sql')} onClick={() => switchLang('sql')}>🗄️ SQL</button>
+        {ONLINE_LANGUAGES.map((l) => (
+          <button key={l.id} type="button" className={langBtn(lang === l.id)} onClick={() => switchLang(l.id)}>{l.label}</button>
+        ))}
       </div>
 
       {/* Snippet picker */}
@@ -331,7 +382,7 @@ export default function Playground() {
         <span className="text-sm font-semibold text-slate-500">Start from:</span>
         {snippets.map((snip) => (
           <button key={snip.id} type="button"
-            onClick={() => (lang === 'js' ? loadJsSnippet(snip) : loadSqlSnippet(snip))}
+            onClick={() => (lang === 'js' ? loadJsSnippet(snip) : lang === 'sql' ? loadSqlSnippet(snip) : loadOnlineSnippet(onlineLang, snip))}
             className={`rounded-full px-3.5 py-1.5 text-sm font-semibold border transition ${
               activeSnippet.id === snip.id
                 ? 'bg-brand-600 text-white border-brand-600'
@@ -348,7 +399,7 @@ export default function Playground() {
         <div className="overflow-hidden rounded-2xl border border-brand-200 bg-white shadow-card">
           <div className="flex flex-wrap items-center gap-2 border-b border-brand-100 bg-brand-50 px-4 py-2.5">
             <span className="font-mono text-xs font-semibold text-brand-700">
-              {lang === 'js' ? 'main.js' : 'query.sql'}
+              {lang === 'js' ? 'main.js' : lang === 'sql' ? 'query.sql' : onlineLang.file}
             </span>
             <div className="ml-auto flex items-center gap-2">
               {lang === 'js' ? (
@@ -366,7 +417,7 @@ export default function Playground() {
                     Reset
                   </button>
                 </>
-              ) : (
+              ) : lang === 'sql' ? (
                 <>
                   <button type="button" onClick={runSql} disabled={sqlState !== 'ready'}
                     className={`${btn} bg-brand-600 text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50`}>
@@ -377,20 +428,51 @@ export default function Playground() {
                     Reset
                   </button>
                 </>
+              ) : (
+                <>
+                  <button type="button" onClick={runOnline} disabled={onlineRun.status === 'running'}
+                    className={`${btn} bg-brand-600 text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50`}>
+                    {onlineRun.status === 'running' ? 'Running…' : 'Run ▶'}
+                  </button>
+                  <button type="button" onClick={() => { setOnlineCode((m) => ({ ...m, [lang]: activeSnippet.code })); setOnlineRun({ status: 'idle' }); }}
+                    className={`${btn} border border-brand-200 bg-white text-brand-800 hover:bg-brand-100`}>
+                    Reset
+                  </button>
+                </>
               )}
             </div>
           </div>
 
           <CodeEditor
-            value={lang === 'js' ? jsCode : sqlCode}
-            onChange={lang === 'js' ? setJsCode : setSqlCode}
-            onRunShortcut={lang === 'js' ? () => runner.run(jsCode) : runSql}
-            ariaLabel={lang === 'js' ? 'JavaScript code editor' : 'SQL query editor'}
+            value={lang === 'js' ? jsCode : lang === 'sql' ? sqlCode : onlineCode[lang]}
+            onChange={lang === 'js' ? setJsCode : lang === 'sql' ? setSqlCode : (v) => setOnlineCode((m) => ({ ...m, [lang]: v }))}
+            onRunShortcut={lang === 'js' ? () => runner.run(jsCode) : lang === 'sql' ? runSql : runOnline}
+            ariaLabel={lang === 'js' ? 'JavaScript code editor' : lang === 'sql' ? 'SQL query editor' : `${onlineLang.label} code editor`}
           />
+
+          {onlineLang && (
+            <div className="border-t border-white/10 bg-slate-900 px-4 py-3">
+              <label htmlFor="pg-stdin" className="text-[0.7rem] font-bold uppercase tracking-[0.12em] text-slate-400">
+                stdin — input your program reads (one value per line)
+              </label>
+              <textarea
+                id="pg-stdin"
+                value={stdin}
+                onChange={(e) => setStdin(e.target.value)}
+                rows={3}
+                spellCheck={false}
+                placeholder={'e.g.\nAyushi\n21'}
+                className="mt-2 w-full resize-y rounded-lg border border-white/10 bg-slate-950 px-3 py-2 font-mono text-[0.85rem] text-slate-100 outline-none placeholder:text-slate-600 focus:border-brand-400"
+              />
+            </div>
+          )}
 
           <p className="border-t border-brand-100 bg-brand-50/60 px-4 py-2 text-xs text-slate-500">
             Tip: <span className="font-semibold text-slate-600">Ctrl + Enter</span> runs your code ·{' '}
-            <span className="font-semibold text-slate-600">Tab</span> indents · your edits survive language switches.
+            <span className="font-semibold text-slate-600">Tab</span> indents ·{' '}
+            {onlineLang
+              ? `${onlineLang.label} runs online on the free Wandbox runner — your edits survive language switches.`
+              : 'your edits survive language switches.'}
           </p>
         </div>
 
@@ -401,13 +483,21 @@ export default function Playground() {
             {lang === 'js' && runner.running && (
               <span className="text-xs font-semibold text-amber-600">● running…</span>
             )}
+            {onlineLang && onlineRun.status === 'running' && (
+              <span className="text-xs font-semibold text-amber-600">● running {onlineRun.langLabel}…</span>
+            )}
+            {onlineLang && onlineRun.status === 'done' && (
+              <span className={`text-xs font-semibold ${onlineRun.result.code === 0 ? 'text-brand-700' : 'text-red-600'}`}>
+                {onlineRun.result.code === 0 ? '✓ exit code 0' : `✕ exit code ${onlineRun.result.code ?? '—'}`}
+              </span>
+            )}
             {lang === 'sql' && sqlResults && !sqlError && (
               <span className="text-xs font-semibold text-brand-700">
                 {sqlResults.length === 0 ? 'ran OK — no rows' : `${sqlRowCount} row${sqlRowCount === 1 ? '' : 's'}`}
               </span>
             )}
             <button type="button"
-              onClick={lang === 'js' ? () => runner.clear() : () => { setSqlResults(null); setSqlError(''); }}
+              onClick={lang === 'js' ? () => runner.clear() : lang === 'sql' ? () => { setSqlResults(null); setSqlError(''); } : () => setOnlineRun({ status: 'idle' })}
               className="ml-auto rounded-lg border border-brand-200 bg-white px-3 py-1.5 text-xs font-bold text-brand-800 transition hover:bg-brand-100">
               Clear output
             </button>
@@ -426,6 +516,55 @@ export default function Playground() {
                       {line.text}
                     </div>
                   ))
+                )}
+              </div>
+            </div>
+          ) : onlineLang ? (
+            <div className="bg-slate-950">
+              <div className="nice-scroll min-h-[430px] overflow-y-auto px-4 py-3 font-mono text-[0.85rem] leading-relaxed">
+                {onlineRun.status === 'idle' && (
+                  <p className="text-slate-500">
+                    Press Run ▶ (or Ctrl + Enter) — your {onlineLang.label} code runs on the free Wandbox
+                    runner and the output lands here. This mode needs internet; JavaScript and SQL
+                    run inside your browser instead.
+                  </p>
+                )}
+                {onlineRun.status === 'running' && (
+                  <p className="text-amber-300">⏳ Running {onlineRun.langLabel}… free runners can take a few seconds, especially for compiled languages.</p>
+                )}
+                {onlineRun.status === 'error' && (
+                  <div className="rounded-lg border border-amber-300/40 bg-amber-400/10 px-3 py-2.5 text-amber-200">
+                    {onlineRun.message}
+                  </div>
+                )}
+                {onlineRun.status === 'done' && (
+                  <>
+                    {onlineRun.result.stdout && (
+                      <pre className="whitespace-pre-wrap break-words text-slate-100">{onlineRun.result.stdout}</pre>
+                    )}
+                    {!onlineRun.result.stdout && onlineRun.result.code === 0 && !onlineRun.result.compileOutput && (
+                      <p className="text-slate-500">(your program ran, but printed nothing — add a print statement so you can see it)</p>
+                    )}
+                    {onlineRun.result.compileOutput && (
+                      <>
+                        <p className="mt-3 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-amber-400">Compiler output</p>
+                        <pre className="mt-1 whitespace-pre-wrap break-words text-amber-200">{onlineRun.result.compileOutput}</pre>
+                      </>
+                    )}
+                    {onlineRun.result.stderr && (
+                      <>
+                        <p className="mt-3 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-red-400">stderr</p>
+                        <pre className="mt-1 whitespace-pre-wrap break-words text-red-300">{onlineRun.result.stderr}</pre>
+                      </>
+                    )}
+                    <p className={`mt-4 border-t border-white/10 pt-2 text-xs font-bold ${onlineRun.result.code === 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {onlineRun.result.code === 0
+                        ? '✓ Finished · exit code 0'
+                        : onlineRun.result.signal
+                          ? `✕ Stopped by the runner (${onlineRun.result.signal}) — usually a crash or a timeout`
+                          : `✕ Finished · exit code ${onlineRun.result.code ?? 'unknown'}`}
+                    </p>
+                  </>
                 )}
               </div>
             </div>

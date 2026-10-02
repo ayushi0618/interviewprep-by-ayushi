@@ -652,6 +652,30 @@ const handleDelete = useCallback(
 > [!IMPORTANT]
 > **When NOT to use them:** Most computations are cheap — wrapping them costs more than it saves. Reach for `useMemo`/`useCallback` only when (1) a calculation is genuinely expensive, or (2) a memoised child is re-rendering because it keeps receiving a "new" function prop. Premature optimisation makes code harder to read for zero gain. React re-rendering a small component is fast and normal.
 
+### The decision rule — ask two questions
+
+When you are unsure, run this two-question check before reaching for either hook:
+
+1. **Is the work itself expensive?** Filtering 10,000 rows, sorting a huge list, heavy math on every keystroke. If yes, that's `useMemo` for the result.
+2. **Am I passing this to a child wrapped in `React.memo`?** If yes, and the child keeps re-rendering, the prop's identity is changing every render — that's `useCallback` for a function (or `useMemo` for an object/array).
+
+If the answer to both is *no*, write the plain version. Here is the whole rule in one speakable line: *"Memoise a value when computing it is the expensive part; memoise a function when its identity is the problem — otherwise, let React just re-run it."*
+
+### Tiny example — spot the difference in six lines
+
+```jsx
+// ❌ Child re-renders on every keystroke in the parent:
+//    handleClick is a brand-new function on every render.
+<HeavyList onSelect={id => setSelected(id)} />
+
+// ✅ Same logic, stable identity — HeavyList can now skip re-renders
+//    when its other props haven't changed:
+const handleSelect = useCallback(id => setSelected(id), []);
+<HeavyList onSelect={handleSelect} />
+```
+
+Nothing about *what the function does* changed — only whether React sees the *same* function object across renders. That identity check (`Object.is` on props) is the entire reason `useCallback` exists, and it only pays off when the receiving child is memoised. Without `React.memo` on the child, a stable function changes nothing.
+
 **What the interviewer asks:** "Difference between them, in one line?"
 **Say this:** "`useMemo` caches a value, `useCallback` caches a function — in fact `useCallback(fn, deps)` is just `useMemo(() => fn, deps)`."
 
@@ -685,6 +709,36 @@ const { data, loading, error } = useFetch("/api/bills");
 ```
 
 Rules: custom hooks must start with `use`, and they can call other hooks (built-in or custom). They share *logic*, not *state* — two components using `useFetch` each get their own separate state.
+
+### When should you extract one? Three honest signals
+
+Don't create a custom hook just because you can. Extract when you see one of these:
+
+1. **The same logic appears in two or more components** — fetching, toggling, tracking online status. The second copy is your signal; the first copy is just code.
+2. **A component's logic is drowning its JSX** — when the top half of a component is 40 lines of state and effects and the markup barely fits on screen, the logic wants its own named home.
+3. **The logic has a name** — if you can say it in two words (`useToggle`, `useWindowSize`, `useDebounce`) and another developer would guess what it returns, it deserves to be a hook. If you can't name it, it isn't a hook yet, it's just a long component.
+
+The speakable version: *"I extract a hook when the same stateful logic shows up twice, or when naming it makes the component readable again — not before."*
+
+### Worked micro-hook — `useToggle` in ten lines
+
+The smallest useful hook: a boolean plus the functions to flip it. Settings pages, modals, and dropdowns all need exactly this.
+
+```jsx
+function useToggle(initial = false) {
+  const [on, setOn] = useState(initial);
+  const toggle = useCallback(() => setOn(prev => !prev), []);
+  const setTrue = useCallback(() => setOn(true), []);
+  const setFalse = useCallback(() => setOn(false), []);
+  return { on, toggle, setTrue, setFalse };
+}
+
+// In any component — no repeated useState + flip logic:
+const menu = useToggle();
+<button onClick={menu.toggle}>{menu.on ? "Close menu" : "Open menu"}</button>
+```
+
+Notice what got packaged: not the button (that's UI, and it stays in the component), but the *behaviour* — a value and its three honest ways to change. That's the test for every custom hook: **logic travels, markup stays.**
 
 ---
 
@@ -733,6 +787,14 @@ In big apps people use libraries like **React Query (TanStack Query)** or **SWR*
 
 React apps are single-page — React Router swaps components based on the URL **without reloading the page**.
 
+Think of it in plain words first. A normal website is like a book: clicking a link tears out the current page and fetches a fresh printed one from the server. A React app is more like a stage with one backdrop that never leaves: React Router is the stage manager who, when the address in the URL bar changes, quietly swaps which actor (component) stands in the light. The audience sees a "new page"; the browser never actually reloaded anything.
+
+Three words carry the whole topic:
+
+- **Route** — one entry in the address book: *"when the URL looks like THIS, show THAT component."* It pairs a path pattern with a component, nothing more.
+- **`Link`** — the polite way to change the address. A normal `<a href="...">` asks the server for a whole new page (full reload, your JS state resets). A `<Link to="...">` just updates the URL and lets the stage manager swap the component — instant, and your state survives.
+- **Params** — the blanks in an address. Writing `/bill/:id` means *"anything can sit where `:id` is, and I want to read it."* The URL `/bill/42` fills the blank with `42`, and `useParams()` hands you `{ id: "42" }` to use.
+
 ```jsx
 import { BrowserRouter, Routes, Route, Link, useParams } from "react-router-dom";
 
@@ -757,11 +819,15 @@ function BillDetail() {
 }
 ```
 
-Three things to remember: `<Link>` navigates without a page reload (unlike `<a>`), `<Routes>` picks the first matching `<Route>`, and `useParams()` reads dynamic segments like `:id`. (There's also `useNavigate()` for redirecting after a form submit or login.)
+Read that code like sentences: `BrowserRouter` watches the URL bar; `Routes` looks through its `Route` children and renders the first whose `path` matches; `BillDetail` doesn't receive the ID as a prop — it *asks the router* for it with `useParams()`. Navigating to `/bill/42` doesn't create a new page; it makes the same `BillDetail` component render with `id = "42"`, so one component covers every possible bill.
+
+Three things to remember: `<Link>` navigates without a page reload (unlike `<a>`), `<Routes>` picks the first matching `<Route>`, and `useParams()` reads dynamic segments like `:id`. (There's also `useNavigate()` for redirecting after a form submit or login — reach for it when the *code*, not a click, decides where to go next: `navigate("/dashboard")` after a successful login.)
 
 ---
 
 ## 📌 14. Performance Basics
+
+Start with what a re-render actually is, because most performance confusion comes from picturing it wrong. **A re-render means React calls your component function again** and compares the new virtual tree with the old one. It does *not* mean the browser rebuilt the page. If the diff finds no real difference, nothing in the actual DOM changes — the "render" cost you just paid was one function call and one comparison, which for a small component is nearly free.
 
 A component **re-renders** when: its **state changes**, its **parent re-renders** (children re-render by default), or a **context it consumes changes**.
 
@@ -771,6 +837,17 @@ Key ideas a fresher should know:
 - **`React.memo`** — wraps a component so it skips re-rendering if its props are unchanged: `const Card = React.memo(function Card(props) { ... })`. Useful for heavy list items; useless if props are new objects/functions every render (that's where `useCallback`/`useMemo` come in).
 - **Stable keys** — changing keys (like `key={Math.random()}`) force React to destroy and rebuild DOM nodes instead of updating them. Expensive and state-destroying.
 - **Keep state low** — state that lives in a small child re-renders only that child. Lifting state to the top of the app makes every keystroke re-render everything below it.
+
+### Three real fixes (and when each one is actually the fix)
+
+1. **Memoise the heavy child.** A list rendering 200 rows on every keystroke in a search box above it? Wrap the row: `const BillRow = React.memo(({ bill }) => <li>{bill.month} — ₹{bill.amount}</li>);` — rows whose `bill` prop didn't change now skip rendering entirely.
+2. **Stabilise the function you pass down.** `React.memo` alone fails if you hand the child a fresh handler each render. Pair them: `const handleDelete = useCallback(id => remove(id), []);` — same function object every render, so the identity check inside `memo` can actually pass.
+3. **Move state down to where it's used.** If only the search input needs `query`, don't keep it in `App`. `function SearchBox() { const [query, setQuery] = useState(""); ... }` — now typing re-renders one small input component instead of the whole page tree beneath a top-level state.
+
+Notice the order: fix 3 needs no new APIs at all and solves the most common beginner slowness. Reach for `memo` and `useCallback` after placement, not before.
+
+> [!WARNING]
+> **The common trap:** writing `<HeavyList config={{ pageSize: 20 }} />` or `onClick={() => doThing()}` inline. That object (or arrow function) is a *brand-new* prop on every render, so `React.memo` compares it, sees a "different" prop, and re-renders anyway — your optimisation silently does nothing. The rule to say out loud: *"Memo only works if the props are genuinely stable; an inline object or function breaks it every single render."*
 
 > [!NOTE]
 > **Under the hood:** a "re-render" is just React calling your function again and comparing virtual trees — it does **not** touch the real DOM unless the diff finds a change. That's why re-rendering is cheap, and why experienced React developers say "let it re-render; optimise only when you can *measure* the slowness." The genuinely expensive mistake isn't re-rendering — it's creating new object/array/function props on every render, which silently defeats `React.memo` and dependency checks downstream.

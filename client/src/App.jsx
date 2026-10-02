@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AuthProvider } from './lib/auth.jsx';
 import { ProgressProvider } from './lib/progress.jsx';
+import { TOPICS } from './content/topics';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Home from './pages/Home';
@@ -15,23 +16,66 @@ import Roadmap from './pages/Roadmap';
 import Auth from './pages/Auth';
 import Profile from './pages/Profile';
 
-// Simple state-based routing — enough for a notes site, and it keeps the
-// build a single static page the Express server can serve. The route is
-// remembered (ip_route) so a refresh keeps your place.
+// State-based routing, mirrored into real URLs so pages are shareable:
+//   /notes/:topic            → a guide's course page (chapter list)
+//   /notes/:topic/:chapter   → one chapter of the guide
+//   /problem/:id, /problems, /plans, /mock, ... for the rest.
+// The URL wins on load (deep links), the saved route (ip_route) is the
+// fallback at '/', and Back/Forward work via popstate.
 //   home | notes | problems | roadmap | sheet | problem | plans | mock | playground | auth | profile
+const PATH_FOR = {
+  home: '/', problems: '/problems', roadmap: '/roadmap', sheet: '/sheet',
+  plans: '/plans', mock: '/mock', playground: '/playground', auth: '/auth', profile: '/profile',
+};
+
+function routeFromPath(pathname) {
+  const seg = String(pathname || '/').split('/').filter(Boolean).map((s) => {
+    try { return decodeURIComponent(s); } catch { return s; }
+  });
+  if (!seg.length) return { name: 'home' };
+  if (seg[0] === 'notes') {
+    const slug = TOPICS.some((t) => t.slug === seg[1]) ? seg[1] : 'javascript';
+    return { name: 'notes', slug, chapter: seg[2] || null };
+  }
+  if (seg[0] === 'problem' && seg[1]) return { name: 'problem', problemId: seg[1] };
+  const name = Object.keys(PATH_FOR).find((k) => PATH_FOR[k] === `/${seg[0]}`);
+  return name ? { name } : null;
+}
+
+function pathForRoute(route) {
+  if (!route) return '/';
+  if (route.name === 'notes') return `/notes/${route.slug || 'javascript'}${route.chapter ? `/${route.chapter}` : ''}`;
+  if (route.name === 'problem') return `/problem/${route.problemId}`;
+  return PATH_FOR[route.name] || '/';
+}
+
 export default function App() {
   const [route, setRoute] = useState(() => {
+    const fromUrl = routeFromPath(window.location.pathname);
+    if (fromUrl && window.location.pathname !== '/') return fromUrl;
     const saved = localStorage.getItem('ip_route');
-    try { return saved ? JSON.parse(saved) : { name: 'home' }; } catch { return { name: 'home' }; }
+    try { return saved ? JSON.parse(saved) : (fromUrl || { name: 'home' }); } catch { return fromUrl || { name: 'home' }; }
   });
 
   useEffect(() => {
     localStorage.setItem('ip_route', JSON.stringify(route));
+    const target = pathForRoute(route);
+    if (window.location.pathname !== target) window.history.pushState(null, '', target);
     window.scrollTo({ top: 0 });
   }, [route]);
 
+  useEffect(() => {
+    const onPop = () => { const r = routeFromPath(window.location.pathname); if (r) setRoute(r); };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   const goHome = () => setRoute({ name: 'home' });
-  const goNotes = (slug) => setRoute({ name: 'notes', slug: slug || route.slug || localStorage.getItem('ip_last_slug') || 'javascript' });
+  const goNotes = (slug, chapter) => setRoute({
+    name: 'notes',
+    slug: slug || route.slug || localStorage.getItem('ip_last_slug') || 'javascript',
+    chapter: chapter || null,
+  });
   const goMock = (topic, mode) => setRoute({ name: 'mock', topic, mode });
   const goPlayground = () => setRoute({ name: 'playground' });
   const goSheet = () => setRoute({ name: 'sheet' });
@@ -51,7 +95,7 @@ export default function App() {
           <Navbar
             route={route}
             onHome={goHome}
-            onNotes={(slug) => goNotes(slug)}
+            onNotes={(slug, chapter) => goNotes(slug, chapter)}
             onProblems={goProblems}
             onRoadmap={goRoadmap}
             onSheet={goSheet}
@@ -66,7 +110,7 @@ export default function App() {
           <div className="flex-1">
             {route.name === 'home' && (
               <Home
-                onNotes={(slug) => goNotes(slug)}
+                onNotes={(slug, chapter) => goNotes(slug, chapter)}
                 onMock={() => goMock()}
                 onPlayground={goPlayground}
                 onSheet={goSheet}
@@ -78,7 +122,14 @@ export default function App() {
             )}
             {route.name === 'playground' && <Playground />}
             {route.name === 'notes' && (
-              <Notes slug={route.slug || 'javascript'} onSelect={(slug) => goNotes(slug)} onMock={(slug) => goMock(slug, 'practice')} onHome={goHome} />
+              <Notes
+                slug={route.slug || 'javascript'}
+                chapter={route.chapter || null}
+                onSelectTopic={(slug) => goNotes(slug)}
+                onSelectChapter={(chapterSlug) => goNotes(route.slug || 'javascript', chapterSlug)}
+                onMock={(slug) => goMock(slug, 'practice')}
+                onHome={goHome}
+              />
             )}
             {route.name === 'problems' && <Problems onProblem={goProblem} />}
             {route.name === 'roadmap' && <Roadmap onSheet={goSheet} onProblem={goProblem} />}
@@ -94,7 +145,7 @@ export default function App() {
             )}
             {route.name === 'plans' && (
               <StudyPlans
-                onOpenArticle={(slug) => goNotes(slug)}
+                onOpenArticle={(slug, chapter) => goNotes(slug, chapter)}
                 onOpenProblem={goProblem}
                 onPractice={(slug) => goMock(slug, 'practice')}
                 onOpenPlayground={goPlayground}

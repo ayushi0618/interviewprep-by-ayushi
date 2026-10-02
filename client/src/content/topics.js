@@ -1,7 +1,13 @@
 // Topic registry: sidebar order, metadata, and the raw markdown for each article.
 // Markdown files live next to this file's parent in ./content and are inlined at
 // build time by Vite (?raw imports), so articles ship with the static site.
+// Each guide is ALSO split into chapters here (lib/chapters.js): one
+// chapter per `## ` section, rendered one page at a time in the Notes
+// view. Chapter metadata is registered with the progress store so
+// study-plan section items can resolve + tick per chapter.
 import bank from '../data/bank.json';
+import { splitChapters } from '../lib/chapters.js';
+import { registerChapters } from '../lib/progress.js';
 
 const raw = import.meta.glob('./*.md', { query: '?raw', import: 'default', eager: true });
 const byFile = {};
@@ -32,8 +38,19 @@ export const TOPICS = [
 for (const t of TOPICS) {
   t.markdown = byFile[t.file] || `# ${t.title}\n\nNotes coming soon.`;
   t.questions = bank[t.slug] || [];
+  t.chapters = splitChapters(t.markdown);
+  t.readMinutes = t.chapters.reduce((n, c) => n + c.minutes, 0);
 }
+
+// Chapter index for the progress store (completion maths + plan
+// section resolution). Slugs/titles only — markdown stays here.
+registerChapters(
+  Object.fromEntries(TOPICS.map((t) => [t.slug, t.chapters.map(({ slug, title, subs }) => ({ slug, title, subs }))])),
+);
 
 export const ALL_QUESTIONS = TOPICS.flatMap((t) => t.questions.map((q) => ({ ...q, topic: t.slug, topicTitle: t.title })));
 export const TOTAL_QUESTIONS = ALL_QUESTIONS.length;
+export const TOTAL_CHAPTERS = TOPICS.reduce((n, t) => n + t.chapters.length, 0);
 export const getTopic = (slug) => TOPICS.find((t) => t.slug === slug) || TOPICS[0];
+export const getChapter = (topic, chapterSlug) =>
+  (topic?.chapters || []).find((c) => c.slug === chapterSlug) || null;

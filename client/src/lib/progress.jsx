@@ -13,7 +13,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import {
   getProgress, subscribe, replaceProgress,
-  markArticle, recordProblemAttempt, recordProblemSolved, saveProblemCode,
+  markArticle, markChapter, recordProblemAttempt, recordProblemSolved, saveProblemCode,
   togglePlanItem, startPlan,
 } from './progress';
 import { useAuth, apiFetch } from './auth.jsx';
@@ -21,7 +21,7 @@ import { useAuth, apiFetch } from './auth.jsx';
 const ProgressContext = createContext(null);
 
 const actions = {
-  markArticle, recordProblemAttempt, recordProblemSolved, saveProblemCode,
+  markArticle, markChapter, recordProblemAttempt, recordProblemSolved, saveProblemCode,
   togglePlanItem, startPlan,
 };
 
@@ -31,6 +31,13 @@ export function mergeProgress(local, remote) {
   const articles = {};
   for (const src of [remote.articles || {}, local.articles || {}]) {
     for (const [k, v] of Object.entries(src)) articles[k] = Math.max(articles[k] || 0, v || 0);
+  }
+  const chapters = {};
+  for (const t of new Set([...Object.keys(local.chapters || {}), ...Object.keys(remote.chapters || {})])) {
+    chapters[t] = {};
+    for (const src of [remote.chapters?.[t] || {}, local.chapters?.[t] || {}]) {
+      for (const [c, v] of Object.entries(src)) chapters[t][c] = Math.max(chapters[t][c] || 0, v || 0);
+    }
   }
   const problems = {};
   for (const id of new Set([...Object.keys(local.problems || {}), ...Object.keys(remote.problems || {})])) {
@@ -54,7 +61,7 @@ export function mergeProgress(local, remote) {
   for (const src of [remote.planStart || {}, local.planStart || {}]) {
     for (const [k, v] of Object.entries(src)) planStart[k] = planStart[k] && planStart[k] < v ? planStart[k] : v;
   }
-  return { articles, problems, plans, planStart };
+  return { articles, chapters, problems, plans, planStart };
 }
 
 // Small summary of the locally-stored live-interview sessions, synced so

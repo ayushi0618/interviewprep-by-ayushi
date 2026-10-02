@@ -62,8 +62,16 @@ function sanitizeProgress(input) {
     plans[planId] = {};
     for (const [k, v] of Object.entries(items)) if (v) plans[planId][k] = true;
   }
+  const chapters = {};
+  for (const [topic, chs] of Object.entries(obj(p.chapters))) {
+    if (!chs || typeof chs !== 'object' || Array.isArray(chs)) continue;
+    const clean = {};
+    for (const [c, v] of Object.entries(chs)) clean[String(c).slice(0, 120)] = Number(v) || 0;
+    chapters[String(topic).slice(0, 60)] = clean;
+  }
   return {
     articles: obj(p.articles),
+    chapters,
     problems,
     plans,
     planStart: obj(p.planStart),
@@ -187,7 +195,7 @@ function createAuthRouter({ store, storeReady }) {
     try {
       const saved = await (await db()).getProgress(req.user.id);
       return res.json({
-        progress: saved?.progress || { articles: {}, problems: {}, plans: {}, planStart: {} },
+        progress: saved?.progress || { articles: {}, chapters: {}, problems: {}, plans: {}, planStart: {} },
         liveSessionsMeta: saved?.liveSessionsMeta || null,
         updatedAt: saved?.updatedAt || null,
       });

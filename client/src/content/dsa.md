@@ -71,6 +71,40 @@ Arrays are contiguous memory: index access is O(1), but inserting/deleting in th
 > [!NOTE]
 > 📌 **Prefix idea in one line:** Precompute `prefix[i] = sum of first i elements` once, and then *any* range sum `sum(l..r) = prefix[r+1] - prefix[l]` becomes O(1) instead of O(n) every time.
 
+### What interviewers are actually probing here
+
+Arrays and strings look too easy, so most students skip them — and then lose marks on the follow-ups. When an interviewer gives you an array problem, they are rarely testing whether you can write a loop. They are checking three quieter things:
+
+1. **Can you work without extra space?** The first solution often builds a second array or a new string. The interviewer then asks, *"Can you do it in place?"* That is where the real test starts.
+2. **Do you think about cost while you code?** Joining strings inside a loop, calling a sort inside a loop, or scanning the array again for every query — each one quietly changes your complexity. Saying the cost out loud while you code is the skill.
+3. **Do you handle the boring edges?** Empty array, single element, all duplicates, already-sorted input. Interviewers keep one of these in their pocket.
+
+A speakable line that covers all three: *"I can do this with a second array in O(n) time and O(n) space — if you want, I will now do the same thing in place with two pointers and O(1) extra space."* You have just answered the follow-up before it was asked.
+
+### In-place thinking, in plain words
+
+"In place" means you rearrange the same array instead of building a new one. You keep two pointers — usually one at each end, or a *read* pointer and a *write* pointer — and you swap or overwrite as you go. No second array grows with the input, so extra space stays O(1).
+
+Think of it like rearranging chairs in a room instead of renting a second room: you temporarily hold one chair (a `temp` variable) while you move another, but you never need double the furniture.
+
+### Worked micro-example — reverse `[1, 2, 3, 4]` in place
+
+Goal: turn `[1, 2, 3, 4]` into `[4, 3, 2, 1]` without a second array. Left starts at index 0, right at index 3. Swap, then step both inward.
+
+| Step | left (value) | right (value) | Action | Array after |
+|---|---|---|---|---|
+| Start | 0 → 1 | 3 → 4 | Swap 1 and 4 | `[4, 2, 3, 1]` |
+| Next | 1 → 2 | 2 → 3 | Swap 2 and 3 | `[4, 3, 2, 1]` |
+| Stop | left passes right | — | Pointers have met — done | `[4, 3, 2, 1]` |
+
+Two swaps, one `temp` variable, done. That is the whole pattern: **swap the ends, move inward, stop when the pointers cross.** The same skeleton reverses a string (after converting it to a character array), checks a palindrome, and partitions an array — only the swap condition changes.
+
+> [!WARNING]
+> **Three pitfalls that cost marks here:**
+> 1. **Building a string in a loop** — `result = result + ch` copies the whole string every time, so n characters quietly cost O(n²). Collect pieces in an array and join once at the end.
+> 2. **Modifying the array you are still reading** — if you delete or overwrite while scanning forward, you skip the next element. Either scan backwards for deletions, or use a separate write pointer that only moves forward.
+> 3. **Forgetting the single-element and empty cases** — a reverse that starts with `right = length - 1` crashes on an empty array in some languages. Name the edge case out loud before you code; interviewers notice.
+
 **Practice:** Reverse String (in-place swap), Maximum Subarray (Kadane's — track best-ending-here vs best-so-far).
 
 ---
@@ -354,6 +388,10 @@ console.log("missing gives:", binarySearch(arr, 8)); // expect -1
 
 A singly linked list is nodes chained by `next` pointers. No random access (finding the k-th element is O(n)), but inserting/deleting at a known node is O(1) — just rewire two arrows.
 
+### Singly vs doubly, in one breath
+
+A **singly** linked list gives each node one arrow: `next`. You can only walk forward, and deleting a node means you must already be standing on the node *before* it — you cannot step back. A **doubly** linked list gives each node two arrows: `next` and `prev`. Now you can walk both ways and delete a node you are standing on, because you can reach its neighbours from the node itself. The price is one extra pointer per node and one extra arrow to keep correct on every insert and delete — more memory, more chances to rewire one side and forget the other. Interviewers usually mean *singly* unless they say otherwise; name the difference in one line and move on: *"Singly walks one way; doubly walks both ways at the cost of an extra pointer per node."*
+
 **The three moves that solve 80% of linked list problems:**
 
 | Move | How | Solves |
@@ -364,6 +402,15 @@ A singly linked list is nodes chained by `next` pointers. No random access (find
 
 **🔍 Cycle detection (Floyd's):** Run fast (2 steps) and slow (1 step). If there's a cycle, fast eventually laps slow and they **meet**. If fast hits `null`, there's no cycle. Why it works: once both are inside the loop, fast gains exactly 1 step per move, so it can never jump over slow forever.
 
+### The fast/slow idea, said slowly
+
+Keep two walkers on the same list, both starting at the head. On every beat, `slow` takes one step and `fast` takes two. Because they move at different speeds, the *gap* between them tells you things a single walker cannot:
+
+- **Finding the middle:** when `fast` runs off the end, `slow` has covered exactly half the distance — it is standing on the middle node. You found the centre in one pass, without counting the length first.
+- **Spotting a cycle:** on a straight list, `fast` pulls away forever and exits. On a list that loops back, both walkers eventually enter the loop, and since `fast` closes the gap by one node per beat, it must land exactly on `slow` — it cannot hop over it forever.
+
+The speakable summary: *"Same start, different speeds — the speed difference itself becomes the measuring tool."* If an interviewer asks why fast moves two steps and not three, the honest answer is that two is enough: it keeps the gap-closing argument simple (exactly 1 per beat) and reaches the end in the fewest extra moves.
+
 > [!WARNING]
 > ⚠️ The #1 linked list bug: losing the rest of the list. **Always save `next` before you rewire a pointer.** Say this out loud in the interview — it shows you've actually debugged this before.
 
@@ -373,12 +420,44 @@ A singly linked list is nodes chained by `next` pointers. No random access (find
 
 ## 9. Stacks & Queues — Order Is the Whole Point
 
+These two structures store the same kind of thing — a sequence of items. The *only* difference is the order in which items come back out, and that single difference decides which one a problem needs.
+
+**A stack is LIFO — Last In, First Out.** Picture a stack of plates in a canteen. You place a fresh plate on the *top*, and when someone needs a plate, they also take it from the *top*. The last plate you put down is the first plate that leaves. There is no reaching into the middle; both adding (`push`) and removing (`pop`) happen at the same end — the top.
+
+**A queue is FIFO — First In, First Out.** Picture the line at a ticket counter. New people join at the *back*, and the person served next is always the one at the *front* — the one who has waited longest. Adding (`enqueue`) happens at the back, removing (`dequeue`) at the front, the opposite end.
+
+If you remember nothing else, remember this pair of sentences: *a stack reverses order; a queue preserves it.*
+
 | Structure | Rule | Analogy | Remove from | Classic use |
 |---|---|---|---|---|
 | **Stack** | LIFO — Last In, First Out | Stack of plates | Same end you added (top) | Undo, recursion, matching brackets |
 | **Queue** | FIFO — First In, First Out | Line at a ticket counter | Opposite end (front) | BFS, scheduling, buffers |
 
+### Two classic uses each — the ones interviewers actually name
+
+**Where a stack earns its keep:**
+1. **Undo and the browser Back button.** Every action you take is pushed; Undo pops the most recent action first. Your browsing history behaves the same way — Back shows you the *last* page you visited, not the first.
+2. **The call stack behind recursion.** When a function calls another function, the caller is pushed and paused; the inner call must finish and pop before the caller resumes. This is also why matching brackets need a stack: the *most recent* opening bracket is always the one that must close first.
+
+**Where a queue earns its keep:**
+1. **Breadth-first search (BFS).** Nodes are explored in the order they were discovered — the nearest neighbours finish their turn before anything deeper (see the traced BFS in Section 11). First discovered, first visited: that is FIFO doing the work.
+2. **Scheduling and buffering.** Print jobs, message queues, and video buffering all share one promise: things are handled in arrival order, so nothing that arrived early starves while late arrivals jump ahead.
+
 **🔍 Valid Parentheses (the stack classic):** Push every opening bracket. On a closing bracket, the top of the stack *must* be its match — if not, invalid. At the end, the stack must be empty. The insight: the **most recent** unmatched opener is the one that must close first — that's exactly LIFO.
+
+### Traced example — checking `"([ ])"` with a stack
+
+Read the string left to right. Openers get pushed; a closer must match whatever is currently on top. After each character, the stack shows the openers still waiting to be closed, leftmost at the bottom:
+
+| Character | Action | Stack after (bottom → top) | Why |
+|---|---|---|---|
+| `(` | Push opener | `(` | Nothing to match yet |
+| `[` | Push opener | `( [` | The newer opener sits on top |
+| `]` | Closer — top must be `[` | `(` | It matches, so pop the `[` |
+| `)` | Closer — top must be `(` | *(empty)* | It matches, so pop the `(` |
+| End of string | Check the stack | *(empty)* | Nothing left unmatched — valid ✅ |
+
+Two failure shapes to name out loud: a closer arrives while the stack is **empty** (something closed that never opened), or the string ends with a **non-empty** stack (something opened that never closed). Both mean invalid. Notice *why* a queue would fail here: the first opener, `(`, must close *last* — a queue would hand it back first, which is exactly the wrong order.
 
 > [!NOTE]
 > 🧠 Why BFS uses a queue: BFS explores level by level — nodes discovered first must be *visited* first (the ones closest to the start finish their turn before deeper ones). That first-in-first-out order is literally the definition of a queue. DFS, by contrast, uses a stack (which is also what recursion secretly is — the call stack).
@@ -402,6 +481,34 @@ A binary tree: each node has a value, a left child, and a right child (either ca
 
 > [!TIP]
 > Depth-first traversals (in/pre/post) are just recursion: process children and root in different orders. If you can write one, you can write all three — only the position of the "visit root" line changes.
+
+**All four traversals in one breath:** the three depth-first orders are one recursive walk wearing three outfits — *inorder* visits the root between its two subtrees, *preorder* visits the root before them, *postorder* visits it after them, and *level order* abandons recursion entirely, laying the tree out row by row with a queue. If you can say that sentence and point at where the "visit" line sits, you understand traversals; everything else is typing.
+
+Try it on one tiny tree — root `2`, left child `1`, right child `3`:
+
+- **Inorder** (left, root, right): `1, 2, 3` — sorted, exactly as the table promises for a BST.
+- **Preorder** (root, left, right): `2, 1, 3` — the root speaks first.
+- **Postorder** (left, right, root): `1, 3, 2` — the root speaks last, after both children.
+- **Level order**: `2, 1, 3` — same numbers here by luck of the shape; on a bigger tree it reads strictly row by row.
+
+Same three nodes, four different visiting orders. The tree never changes — only *when you visit the root* changes.
+
+### Height and depth — two words interviewers swap on purpose
+
+These two get mixed up constantly, and interviewers know it, so define them precisely:
+
+- **Depth of a node** = how far it is *down from the root*. The root itself has depth 0 (some books say 1 — mention your convention out loud and stay consistent).
+- **Height of a node** = how far it is *up from the deepest leaf below it*. A leaf has height 0, and the **height of the whole tree is simply the height of its root**.
+
+In plain words: *depth counts edges looking down from the top; height counts edges looking up from the bottom.* They meet at the root, whose depth is 0 and whose height describes the entire tree.
+
+```
+        2        depth 0, height 2
+       / \
+      1   3      depth 1 (both children)
+```
+
+For this tree the height is 2 if you count edges (root → child → leaf on the longest path), or 3 if you count nodes — which is exactly why "Maximum Depth of Binary Tree" problems expect 3 for this shape. The safe interview move: state your counting convention in one line — *"I'll count nodes, so a single node has depth 1"* — then compute `1 + max(height of left, height of right)`. The recursion is three words long; the marks are in the convention.
 
 ### BST Property
 

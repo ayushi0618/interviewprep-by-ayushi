@@ -3,7 +3,7 @@ import { PROBLEMS } from '../data/dsaSheet';
 import { PLANS, planItemCount } from '../data/plans';
 import { useProgress } from '../lib/progress.jsx';
 import { useAuth } from '../lib/auth.jsx';
-import { isArticleDone, isProblemSolved, isPlanItemDone, articleDoneCount, problemSolvedCount } from '../lib/progress';
+import { isTopicComplete, isChapterDone, isProblemSolved, isPlanItemDone, topicChapterCounts, courseChapterTotals, problemSolvedCount } from '../lib/progress';
 import Logo from '../components/Logo';
 
 // Small SVG progress ring (used on plan cards + dashboard).
@@ -28,7 +28,7 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
   const groups = [...new Set(TOPICS.map((t) => t.group))];
 
   // --- dashboard numbers (one progress store → every meter agrees) ---
-  const articlesDone = articleDoneCount(progress, TOPICS.map((t) => t.slug));
+  const chTotals = courseChapterTotals(progress, TOPICS.map((t) => t.slug));
   const problemsSolved = problemSolvedCount(progress, PROBLEMS.map((p) => p.id));
   const planTotals = PLANS.map((plan) => ({
     plan,
@@ -38,10 +38,11 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
   const planItemsTotal = planTotals.reduce((n, x) => n + x.total, 0);
   const planItemsDone = planTotals.reduce((n, x) => n + x.done, 0);
 
-  // Continue where you left off: next unfinished guide, else next problem.
-  const nextTopic = TOPICS.find((t) => !isArticleDone(progress, t.slug));
+  // Continue where you left off: next unfinished chapter, else next problem.
+  const nextTopic = TOPICS.find((t) => !isTopicComplete(progress, t.slug));
+  const nextChapter = nextTopic?.chapters.find((c) => !isChapterDone(progress, nextTopic.slug, c.slug));
   const nextProblem = PROBLEMS.find((p) => !isProblemSolved(progress, p.id));
-  const started = articlesDone + problemsSolved + planItemsDone > 0;
+  const started = chTotals.done + problemsSolved + planItemsDone > 0;
 
   const meter = (done, total) => (
     <div className="h-2 rounded-full bg-brand-100 overflow-hidden mt-2">
@@ -108,8 +109,8 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
                 : 'Guest mode — create a profile to sync across devices'}
             </span>
             {nextTopic ? (
-              <button onClick={() => onNotes(nextTopic.slug)} className="btn-primary ml-auto text-sm">
-                Continue: {nextTopic.emoji} {nextTopic.title} →
+              <button onClick={() => onNotes(nextTopic.slug, nextChapter?.slug)} className="btn-primary ml-auto text-sm">
+                Continue: {nextTopic.emoji} {nextTopic.title}{nextChapter ? ` · ${nextChapter.title}` : ''} →
               </button>
             ) : nextProblem ? (
               <button onClick={() => onOpenProblem(nextProblem.id)} className="btn-primary ml-auto text-sm">
@@ -121,9 +122,9 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
           </div>
           <div className="grid sm:grid-cols-3 gap-4 mt-5">
             <button onClick={() => onNotes()} className="card-hover text-left rounded-2xl border border-brand-100 bg-white p-4 shadow-card">
-              <p className="font-extrabold text-brand-900">📚 Notes <span className="float-right text-brand-800">{articlesDone}/{TOPICS.length}</span></p>
-              {meter(articlesDone, TOPICS.length)}
-              <p className="text-xs font-semibold text-slate-500 mt-2">{started ? 'Guides marked complete' : 'Read a guide, tick it complete'}</p>
+              <p className="font-extrabold text-brand-900">📚 Notes <span className="float-right text-brand-800">{chTotals.done}/{chTotals.total}</span></p>
+              {meter(chTotals.done, chTotals.total)}
+              <p className="text-xs font-semibold text-slate-500 mt-2">{started ? 'Chapters ticked off across all guides' : 'Read a chapter, tick it complete'}</p>
             </button>
             <button onClick={onSheet} className="card-hover text-left rounded-2xl border border-brand-100 bg-white p-4 shadow-card">
               <p className="font-extrabold text-brand-900">🧩 DSA Sheet <span className="float-right text-brand-800">{problemsSolved}/{PROBLEMS.length}</span></p>
@@ -148,7 +149,7 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
               <button key={t.slug} onClick={() => onNotes(t.slug)}
                 className="whitespace-nowrap rounded-full border border-brand-200 bg-brand-50 px-3.5 py-1.5 text-sm font-semibold text-brand-800 transition hover:bg-brand-600 hover:text-white hover:border-brand-600">
                 {t.emoji} {t.title}
-                {isArticleDone(progress, t.slug) && <span className="ml-1.5 text-brand-600 font-extrabold">✓</span>}
+                {isTopicComplete(progress, t.slug) && <span className="ml-1.5 text-brand-600 font-extrabold">✓</span>}
               </button>
             ))}
             <button onClick={onPlayground}
@@ -199,7 +200,8 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
             <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-brand-500">{g}</h3>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
               {TOPICS.filter((t) => t.group === g).map((t) => {
-                const doneGuide = isArticleDone(progress, t.slug);
+                const doneGuide = isTopicComplete(progress, t.slug);
+                const counts = topicChapterCounts(progress, t.slug);
                 return (
                   <button key={t.slug} onClick={() => onNotes(t.slug)}
                     className="card-hover text-left bg-white rounded-2xl border border-brand-100 shadow-card p-5">
@@ -212,7 +214,7 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
                     <h3 className="font-bold text-lg text-slate-900 mt-3 leading-snug">{t.title}</h3>
                     <p className="text-sm text-slate-600 mt-1.5 leading-relaxed">{t.blurb}</p>
                     <p className="text-xs font-bold text-brand-600 mt-3">
-                      {t.group} · {t.questions.length > 0 ? `🎤 ${t.questions.length} mock questions` : '📖 Guide'} →
+                      {t.group} · {counts.done}/{counts.total} chapters · {t.questions.length > 0 ? `🎤 ${t.questions.length} mock questions` : '📖 Guide'} →
                     </p>
                   </button>
                 );

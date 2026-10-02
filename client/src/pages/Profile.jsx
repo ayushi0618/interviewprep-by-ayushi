@@ -4,7 +4,7 @@ import { PROBLEMS, DSA_TOPICS, problemsByTopic } from '../data/dsaSheet';
 import { PLANS, planItemCount } from '../data/plans';
 import { useAuth, apiFetch } from '../lib/auth.jsx';
 import { useProgress } from '../lib/progress.jsx';
-import { isArticleDone, isProblemSolved, isPlanItemDone, articleDoneCount, problemSolvedCount } from '../lib/progress';
+import { isProblemSolved, isPlanItemDone, isTopicComplete, courseChapterTotals, problemSolvedCount } from '../lib/progress';
 
 // Profile page: who you are + everything you've done — guides completed,
 // sheet problems (per-topic bars), plans in progress, live-interview
@@ -47,7 +47,8 @@ export default function Profile({ onAuth, onNotes, onSheet, onPlans, onMock, onH
   const memberSince = user.createdAt
     ? new Date(user.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
     : '—';
-  const articlesDone = articleDoneCount(progress, TOPICS.map((t) => t.slug));
+  const chTotals = courseChapterTotals(progress, TOPICS.map((t) => t.slug));
+  const guidesDone = TOPICS.filter((t) => isTopicComplete(progress, t.slug)).length;
   const solvedCount = problemSolvedCount(progress, PROBLEMS.map((p) => p.id));
 
   const plansInProgress = PLANS
@@ -128,9 +129,9 @@ export default function Profile({ onAuth, onNotes, onSheet, onPlans, onMock, onH
       {/* Stat cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-5">
         <div className={statCard}>
-          <p className="text-3xl font-extrabold text-brand-900">{articlesDone}<span className="text-lg text-slate-400">/{TOPICS.length}</span></p>
-          <p className="text-sm font-bold text-slate-600 mt-0.5">📚 Guides completed</p>
-          {meter(articlesDone, TOPICS.length)}
+          <p className="text-3xl font-extrabold text-brand-900">{chTotals.done}<span className="text-lg text-slate-400">/{chTotals.total}</span></p>
+          <p className="text-sm font-bold text-slate-600 mt-0.5">📚 Chapters completed · {guidesDone}/{TOPICS.length} guides</p>
+          {meter(chTotals.done, chTotals.total)}
           <button onClick={onNotes} className="text-sm font-bold text-brand-700 mt-3 hover:text-brand-600">Open the course track →</button>
         </div>
         <div className={statCard}>

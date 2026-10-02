@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { TOPICS, ALL_QUESTIONS } from '../content/topics';
 import { PROBLEMS } from '../data/dsaSheet';
 import { useProgress } from '../lib/progress.jsx';
+import { courseChapterTotals } from '../lib/progress';
 import { useAuth } from '../lib/auth.jsx';
 import Logo from './Logo';
 
@@ -19,15 +20,21 @@ export default function Navbar({ route, onHome, onNotes, onProblems, onRoadmap, 
     const q = query.trim().toLowerCase();
     if (q.length < 2) return null;
     const topics = TOPICS.filter((t) => `${t.title} ${t.blurb} ${t.group}`.toLowerCase().includes(q)).slice(0, 4);
+    const chapters = TOPICS.flatMap((t) =>
+      t.chapters
+        .filter((c) => c.title.toLowerCase().includes(q))
+        .map((c) => ({ topic: t, chapter: c })),
+    ).slice(0, 5);
     const problems = PROBLEMS.filter((p) => `${p.title} ${p.topic} ${p.difficulty}`.toLowerCase().includes(q)).slice(0, 4);
     const questions = ALL_QUESTIONS.filter((x) => x.question.toLowerCase().includes(q)).slice(0, 6);
-    return { topics, problems, questions };
+    return { topics, chapters, problems, questions };
   }, [query]);
 
-  // Overall course progress = guides completed + sheet problems solved.
-  const totalUnits = TOPICS.length + PROBLEMS.length;
+  // Overall course progress = chapters completed + sheet problems solved.
+  const chapterTotals = courseChapterTotals(progress, TOPICS.map((t) => t.slug));
+  const totalUnits = chapterTotals.total + PROBLEMS.length;
   const doneUnits =
-    Object.keys(progress.articles || {}).length +
+    chapterTotals.done +
     Object.values(progress.problems || {}).filter((p) => p.solved).length;
   const pct = totalUnits ? Math.round((doneUnits / totalUnits) * 100) : 0;
 
@@ -82,7 +89,7 @@ export default function Navbar({ route, onHome, onNotes, onProblems, onRoadmap, 
           />
           {open && results && (
             <div className="absolute right-0 left-0 mt-2 bg-white rounded-xl shadow-card border border-brand-100 overflow-hidden max-h-[70vh] overflow-y-auto nice-scroll">
-              {results.topics.length === 0 && results.problems.length === 0 && results.questions.length === 0 && (
+              {results.topics.length === 0 && results.chapters.length === 0 && results.problems.length === 0 && results.questions.length === 0 && (
                 <p className="px-4 py-3 text-sm text-slate-500">No matches — try “hooks”, “event loop”, “two sum”, “join”, “jwt”…</p>
               )}
               {results.topics.map((t) => (
@@ -93,6 +100,16 @@ export default function Navbar({ route, onHome, onNotes, onProblems, onRoadmap, 
                     <span className="text-sm font-semibold text-slate-800">{t.emoji} {t.title}</span>
                   </span>
                   <span className="block text-xs text-slate-500 truncate mt-0.5">{t.blurb}</span>
+                </button>
+              ))}
+              {results.chapters.map(({ topic: t, chapter: c }) => (
+                <button key={`${t.slug}/${c.slug}`} className="w-full text-left px-4 py-2.5 hover:bg-brand-50 border-b border-brand-50 transition"
+                  onClick={() => { setQuery(''); setOpen(false); onNotes(t.slug, c.slug); }}>
+                  <span className="flex items-center gap-2">
+                    <span className="text-[0.62rem] font-extrabold uppercase tracking-wide bg-brand-600 text-white px-1.5 py-0.5 rounded">Chapter</span>
+                    <span className="text-sm font-semibold text-slate-800">{c.title}</span>
+                  </span>
+                  <span className="block text-xs text-slate-500 truncate mt-0.5">{t.emoji} {t.title} · ~{c.minutes} min</span>
                 </button>
               ))}
               {results.problems.map((p) => (
@@ -121,7 +138,7 @@ export default function Navbar({ route, onHome, onNotes, onProblems, onRoadmap, 
         </div>
 
         {/* Overall progress chip — every page, one source of truth */}
-        <div className="hidden md:flex items-center gap-2 shrink-0 rounded-full border border-brand-200 bg-brand-50 pl-2 pr-3 py-1" title={`${doneUnits} of ${totalUnits} guides + problems done`}>
+        <div className="hidden md:flex items-center gap-2 shrink-0 rounded-full border border-brand-200 bg-brand-50 pl-2 pr-3 py-1" title={`${doneUnits} of ${totalUnits} chapters + problems done`}>
           <span className="relative grid place-items-center w-6 h-6">
             <svg viewBox="0 0 24 24" className="w-6 h-6 -rotate-90">
               <circle cx="12" cy="12" r="9" fill="none" stroke="#ECE8F9" strokeWidth="3.5" />

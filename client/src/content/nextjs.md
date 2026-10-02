@@ -208,6 +208,20 @@ That round trip is why API routes are the safe home for secrets, validation, and
 
 One concrete difference to keep in your pocket: a plain `<a href="/about">` throws the whole page away and reloads everything — HTML, CSS, JS, the navbar you already had. `<Link>` swaps only the page content, keeps shared layouts mounted, and quietly prefetches the target while the user is still reading. That's why Next navigations feel instant even on average networks.
 
+```tsx
+import Link from "next/link";
+import Image from "next/image";
+
+<Link href="/about">About</Link>                                    {/* internal navigation */}
+<Image src="/profile.jpg" alt="Ayushi" width={400} height={300} />  {/* optimised image */}
+```
+
+Why not the plain tags you already know? A raw `<a>` reloads the whole document on every click — the browser fetches the page again, re-runs the shared layout, and repaints everything, so even a tiny navigation feels like arriving at a brand-new website. A raw `<img>` ships the file exactly as saved: a 4 MB phone photo goes to every visitor, at full size, the moment the page loads, whether they ever scroll down to it or not. `<Link>` and `<Image>` exist to remove those two specific costs — navigation that feels instant, and images sized, compressed, and lazy-loaded for the device asking.
+
+> [!WARNING]
+> **Common traps:** `<Image>` needs `width` and `height` (or `fill` inside a sized parent) — those numbers also reserve space on the page, so the layout does not jump while the image loads. And use `<Link>` for *internal* pages, where prefetching pays off; an external URL gets no prefetch benefit, so a plain link is fine there.
+
+
 ## 📌 8. When to Choose Next.js over Plain React (and When NOT To)
 
 **Choose Next.js when:**

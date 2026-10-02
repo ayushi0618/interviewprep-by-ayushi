@@ -4,17 +4,27 @@
 //
 // Shape (localStorage key "ip_progress_v2"):
 //   {
-//     articles:  { [slug]: timestamp },                  // notes marked complete
+//     articles:  { [slug]: timestamp },                  // topics marked fully complete
+//     chapters:  { [slug]: { [chapterSlug]: timestamp } }, // per-chapter completion
 //     problems:  { [id]: { solved, attempts, lastCode, solvedAt } },
 //     plans:     { [planId]: { [itemKey]: true } },      // manual plan checks
 //     planStart: { [planId]: 'YYYY-MM-DD' }              // "Start plan" dates
 //   }
 //
+// Chapter completion (added with chapter-wise notes) NEVER rewrites
+// existing data destructively: a topic whose `articles` flag is already
+// set reads as "every chapter complete", and unmarking one chapter in
+// that state materialises the others first so nothing else is lost.
+// The `articles` flag is kept as an honest mirror — set exactly when a
+// topic's chapters are all done — because older surfaces and the
+// server-side profile stats read it.
+//
 // Older, separate keys (practice history, live sessions, route) are left
 // untouched — this store only owns learning progress.
+import { resolveChapter } from './chapters.js';
 
 const KEY = 'ip_progress_v2';
-const EMPTY = { articles: {}, problems: {}, plans: {}, planStart: {} };
+const EMPTY = { articles: {}, chapters: {}, problems: {}, plans: {}, planStart: {} };
 
 let cache = null;
 const listeners = new Set();
@@ -61,12 +71,82 @@ export function subscribe(fn) {
 export function markArticle(slug, done = true) {
   const p = load();
   if (done) p.articles[slug] = Date.now();
-  else delete p.articles[slug];
+  else { delete p.articles[slug]; if (p.chapters) delete p.chapters[slug]; }
   persistAndNotify();
 }
 
 export function isArticleDone(p, slug) {
   return Boolean(p?.articles?.[slug]);
+}
+
+// --- chapters -----------------------------------------------------------------
+// Chapter metadata ([{ slug, title }] per topic) is registered once by
+// content/topics.js at import time; completion maths lives here so
+// every surface (sidebar, Home, navbar, plans) agrees.
+
+let chapterIndex = {};
+
+export function registerChapters(index) {
+  chapterIndex = index || {};
+}
+
+export function getChapterMeta(topicSlug) {
+  return chapterIndex[topicSlug] || [];
+}
+
+export function isChapterDone(p, topicSlug, chapterSlug) {
+  return Boolean(p?.articles?.[topicSlug] || p?.chapters?.[topicSlug]?.[chapterSlug]);
+}
+
+export function isTopicComplete(p, topicSlug) {
+  const meta = getChapterMeta(topicSlug);
+  if (!meta.length) return isArticleDone(p, topicSlug);
+  return meta.every((c) => isChapterDone(p, topicSlug, c.slug));
+}
+
+export function topicChapterCounts(p, topicSlug) {
+  const meta = getChapterMeta(topicSlug);
+  return {
+    done: meta.reduce((n, c) => n + (isChapterDone(p, topicSlug, c.slug) ? 1 : 0), 0),
+    total: meta.length,
+  };
+}
+
+export function courseChapterTotals(p, slugs) {
+  return (slugs || Object.keys(chapterIndex)).reduce(
+    (acc, s) => {
+      const { done, total } = topicChapterCounts(p, s);
+      return { done: acc.done + done, total: acc.total + total };
+    },
+    { done: 0, total: 0 },
+  );
+}
+
+export function markChapter(topicSlug, chapterSlug, done = true) {
+  const p = load();
+  const meta = getChapterMeta(topicSlug);
+  if (!p.chapters[topicSlug] || typeof p.chapters[topicSlug] !== 'object') p.chapters[topicSlug] = {};
+  if (done) {
+    p.chapters[topicSlug][chapterSlug] = Date.now();
+  } else if (p.articles[topicSlug]) {
+    // Topic was completed as a whole (legacy flag, no per-chapter data):
+    // materialise every other chapter first so unmarking ONE chapter
+    // keeps the rest complete instead of nuking the topic.
+    const ts = p.articles[topicSlug];
+    for (const c of meta) {
+      if (c.slug !== chapterSlug && !p.chapters[topicSlug][c.slug]) p.chapters[topicSlug][c.slug] = ts;
+    }
+    delete p.chapters[topicSlug][chapterSlug];
+    delete p.articles[topicSlug];
+  } else {
+    delete p.chapters[topicSlug][chapterSlug];
+  }
+  // Keep the whole-topic flag an honest mirror (older surfaces + the
+  // server-side profile stats read it).
+  if (meta.length && meta.every((c) => isChapterDone(p, topicSlug, c.slug)) && !p.articles[topicSlug]) {
+    p.articles[topicSlug] = Date.now();
+  }
+  persistAndNotify();
 }
 
 // --- DSA problems -------------------------------------------------------------
@@ -122,12 +202,20 @@ export function startPlan(planId) {
 }
 
 // Is one plan item "done"? Manual checkbox always counts; some types also
-// auto-complete from the rest of the site (finished the article, solved the
-// problem) so learners never tick the same work twice.
+// auto-complete from the rest of the site so learners never tick the same
+// work twice: 'article' completes when the guide is finished (whole-flag
+// or every chapter), 'section' completes when ITS chapter is done (the
+// label resolves to a chapter via lib/chapters.js; unresolvable labels
+// keep the old whole-guide rule), 'problem' when the problem is solved.
 export function isPlanItemDone(p, plan, item) {
   if (isPlanItemChecked(p, plan.id, item.key)) return true;
   if (!p) return false;
-  if (item.type === 'article' || item.type === 'section') return isArticleDone(p, item.ref);
+  if (item.type === 'article') return isArticleDone(p, item.ref) || isTopicComplete(p, item.ref);
+  if (item.type === 'section') {
+    const chapter = resolveChapter(getChapterMeta(item.ref), item.label);
+    if (chapter) return isChapterDone(p, item.ref, chapter.slug);
+    return isArticleDone(p, item.ref);
+  }
   if (item.type === 'problem') return isProblemSolved(p, item.ref);
   return false; // practice / playground / interview / task → manual tick
 }
