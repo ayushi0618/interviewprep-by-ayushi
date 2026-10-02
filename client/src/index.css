@@ -103,6 +103,29 @@ body { @apply bg-[#f6f7f4] text-ink font-sans antialiased; }
 }
 .task-box.done { @apply bg-brand-500 border-brand-500 text-white; }
 
+/* ---------------------------------------------------------------
+   Shared UI primitives — one button/chip/card system for every
+   page (home, sheet, plans, problem, playground). Difficulty chips
+   use LeetCode's colours so the coding pages feel familiar.
+   --------------------------------------------------------------- */
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 py-2.5 font-bold text-white shadow-card transition hover:bg-brand-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+}
+.btn-outline {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-brand-200 bg-white px-5 py-2.5 font-bold text-brand-800 shadow-card transition hover:border-brand-400 hover:bg-brand-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+}
+.card-hover {
+  @apply transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-card-hover;
+}
+.diff-easy, .diff-medium, .diff-hard {
+  @apply inline-flex items-center rounded-full border px-2 py-0.5 text-[0.7rem] font-bold leading-none;
+}
+.diff-easy { background: #e7f8f4; color: #07856f; border-color: #b5ead9; }
+.diff-medium { background: #fff6e0; color: #9a6a00; border-color: #ffe1a1; }
+.diff-hard { background: #ffeef1; color: #d81f4b; border-color: #ffc2d1; }
+
+::selection { background: #b6dec2; }
+
 /* thin scrollbars for sidebar */
 .nice-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
 .nice-scroll::-webkit-scrollbar-thumb { @apply bg-brand-200 rounded-full; }

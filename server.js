@@ -1,5 +1,10 @@
-// InterviewPrep server — serves the built React site (client/dist) and the
-// one API endpoint behind the Live Interview room: POST /api/interview.
+// InterviewPrep server — serves the built React site (client/dist) plus
+// the APIs behind the site: POST /api/interview (Live Interview room) and
+// accounts/progress sync (server/auth.js + server/store.js).
+//
+// Persistence: MongoDB when MONGO_URI is set and reachable, otherwise a
+// local JSON file (server/data/users.json) — boot logs which mode is live
+// and an unreachable Mongo falls back to JSON instead of crashing.
 //
 // The interview "brain" has two modes:
 //  • Gemini mode — if GEMINI_API_KEY is set, Gemini rephrases Ananya's lines
@@ -16,9 +21,15 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const store = require('./server/store');
+const { createAuthRouter } = require('./server/auth');
 
 const app = express();
-app.use(express.json({ limit: '256kb' }));
+app.use(express.json({ limit: '1mb' }));
+
+// Accounts + progress sync (auth.js); store.init() picks Mongo or JSON.
+const storeReady = store.init();
+app.use('/api', createAuthRouter({ store, storeReady }));
 
 const PORT = process.env.PORT || 3002;
 
@@ -404,4 +415,7 @@ if (fs.existsSync(dist)) {
   app.get('/', (_req, res) => res.send('InterviewPrep: run `npm run build` first, or use `npm run dev` for local development.'));
 }
 
-app.listen(PORT, () => console.log(`🎤 InterviewPrep server on http://localhost:${PORT} (AI: ${process.env.GEMINI_API_KEY ? 'Gemini' : 'scripted'})`));
+app.listen(PORT, () => {
+  console.log(`🎤 InterviewPrep server on http://localhost:${PORT} (AI: ${process.env.GEMINI_API_KEY ? 'Gemini' : 'scripted'})`);
+  storeReady.then(() => console.log(`💾 Progress store mode: ${store.mode()}`));
+});

@@ -26,6 +26,7 @@ export default {
       },
       boxShadow: {
         card: '0 1px 3px rgba(28,77,40,.08), 0 8px 24px -12px rgba(28,77,40,.18)',
+        'card-hover': '0 2px 6px rgba(28,77,40,.10), 0 18px 36px -12px rgba(28,77,40,.28)',
       },
     },
   },

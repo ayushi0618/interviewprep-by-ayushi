@@ -1,14 +1,19 @@
 import { useMemo, useRef, useState } from 'react';
 import { TOPICS, ALL_QUESTIONS } from '../content/topics';
+import { PROBLEMS } from '../data/dsaSheet';
+import { useProgress } from '../lib/progress.jsx';
+import { useAuth } from '../lib/auth.jsx';
 import Logo from './Logo';
 
-// Top bar: the ONE InterviewPrep logo, main navigation, and a search box
-// that filters both topics and practice questions (results jump to the
-// article or the practice room for that topic).
-export default function Navbar({ route, onHome, onNotes, onMock, onPlayground, onPracticeTopic }) {
+// Top bar: the ONE InterviewPrep logo, main navigation (Notes → DSA Sheet
+// → Study Plans → Mock Interview → Run Code), an overall-progress chip,
+// and search across topics + practice questions.
+export default function Navbar({ route, onHome, onNotes, onSheet, onPlans, onMock, onPlayground, onPracticeTopic, onAuth, onProfile }) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const inputRef = useRef(null);
+  const { progress } = useProgress();
+  const { user } = useAuth();
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -18,8 +23,23 @@ export default function Navbar({ route, onHome, onNotes, onMock, onPlayground, o
     return { topics, questions };
   }, [query]);
 
+  // Overall course progress = guides completed + sheet problems solved.
+  const totalUnits = TOPICS.length + PROBLEMS.length;
+  const doneUnits =
+    Object.keys(progress.articles || {}).length +
+    Object.values(progress.problems || {}).filter((p) => p.solved).length;
+  const pct = totalUnits ? Math.round((doneUnits / totalUnits) * 100) : 0;
+
   const linkCls = (active) =>
-    `px-3 py-2 rounded-lg text-sm font-semibold transition ${active ? 'bg-brand-700 text-white' : 'text-brand-900 hover:bg-brand-100'}`;
+    `px-3 py-2 rounded-lg text-sm font-semibold transition whitespace-nowrap ${active ? 'bg-brand-700 text-white shadow-card' : 'text-brand-900 hover:bg-brand-100'}`;
+
+  const links = [
+    { key: 'notes', label: '📚 Notes', icon: '📚', active: route.name === 'notes', onClick: () => onNotes() },
+    { key: 'sheet', label: '🧩 DSA Sheet', icon: '🧩', active: route.name === 'sheet' || route.name === 'problem', onClick: onSheet },
+    { key: 'plans', label: '📋 Study Plans', icon: '📋', active: route.name === 'plans', onClick: onPlans },
+    { key: 'mock', label: '🎤 Mock Interview', icon: '🎤', active: route.name === 'mock', onClick: () => onMock() },
+    { key: 'playground', label: '▶ Run Code', icon: '▶', active: route.name === 'playground', onClick: onPlayground },
+  ];
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b-2 border-brand-600 shadow-sm">
@@ -32,10 +52,10 @@ export default function Navbar({ route, onHome, onNotes, onMock, onPlayground, o
           </span>
         </button>
 
-        <nav className="hidden md:flex items-center gap-1 ml-4">
-          <button className={linkCls(route.name === 'notes')} onClick={() => onNotes()}>📚 Notes</button>
-          <button className={linkCls(route.name === 'playground')} onClick={() => onPlayground()}>▶ Run Code</button>
-          <button className={linkCls(route.name === 'mock')} onClick={() => onMock()}>🎤 Mock Interview</button>
+        <nav className="hidden lg:flex items-center gap-1 ml-4">
+          {links.map((l) => (
+            <button key={l.key} className={linkCls(l.active)} onClick={l.onClick}>{l.label}</button>
+          ))}
         </nav>
 
         <div className="relative flex-1 max-w-md ml-auto">
@@ -71,10 +91,37 @@ export default function Navbar({ route, onHome, onNotes, onMock, onPlayground, o
           )}
         </div>
 
-        <nav className="flex md:hidden items-center gap-1">
-          <button className={linkCls(route.name === 'notes')} onClick={() => onNotes()}>📚</button>
-          <button className={linkCls(route.name === 'playground')} onClick={() => onPlayground()}>▶</button>
-          <button className={linkCls(route.name === 'mock')} onClick={() => onMock()}>🎤</button>
+        {/* Overall progress chip — every page, one source of truth */}
+        <div className="hidden md:flex items-center gap-2 shrink-0 rounded-full border border-brand-200 bg-brand-50 pl-2 pr-3 py-1" title={`${doneUnits} of ${totalUnits} guides + problems done`}>
+          <span className="relative grid place-items-center w-6 h-6">
+            <svg viewBox="0 0 24 24" className="w-6 h-6 -rotate-90">
+              <circle cx="12" cy="12" r="9" fill="none" stroke="#daeee0" strokeWidth="3.5" />
+              <circle cx="12" cy="12" r="9" fill="none" stroke="#308d46" strokeWidth="3.5" strokeLinecap="round"
+                strokeDasharray={`${(pct / 100) * 56.5} 56.5`} />
+            </svg>
+          </span>
+          <span className="text-xs font-extrabold text-brand-800">{pct}%</span>
+        </div>
+
+        {/* Account area: guest CTAs, or avatar → profile */}
+        {user ? (
+          <button onClick={onProfile} className="flex items-center gap-2 shrink-0 rounded-full border border-brand-200 bg-white pl-1 pr-3 py-1 shadow-card transition hover:border-brand-400" title="Your profile">
+            <span className="w-7 h-7 rounded-full bg-brand-600 text-white grid place-items-center text-[0.7rem] font-extrabold">
+              {user.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()}
+            </span>
+            <span className="hidden sm:block text-sm font-bold text-brand-900 max-w-[7rem] truncate">{user.name.split(/\s+/)[0]}</span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={onAuth} className="hidden sm:inline-flex rounded-lg px-3 py-2 text-sm font-bold text-brand-800 transition hover:bg-brand-100">Login</button>
+            <button onClick={onAuth} className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-bold text-white shadow-card transition hover:bg-brand-700 whitespace-nowrap">Create profile</button>
+          </div>
+        )}
+
+        <nav className="flex lg:hidden items-center gap-0.5">
+          {links.map((l) => (
+            <button key={l.key} aria-label={l.label} className={`${linkCls(l.active)} px-2.5`} onClick={l.onClick}>{l.icon}</button>
+          ))}
         </nav>
       </div>
     </header>

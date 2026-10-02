@@ -1,8 +1,52 @@
 import { TOPICS, TOTAL_QUESTIONS } from '../content/topics';
+import { PROBLEMS } from '../data/dsaSheet';
+import { PLANS, planItemCount } from '../data/plans';
+import { useProgress } from '../lib/progress.jsx';
+import { useAuth } from '../lib/auth.jsx';
+import { isArticleDone, isProblemSolved, isPlanItemDone, articleDoneCount, problemSolvedCount } from '../lib/progress';
 import Logo from '../components/Logo';
 
-export default function Home({ onNotes, onMock, onPlayground }) {
+// Small SVG progress ring (used on plan cards + dashboard).
+function Ring({ pct, size = 52, stroke = 5 }) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90 shrink-0">
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#daeee0" strokeWidth={stroke} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#308d46" strokeWidth={stroke} strokeLinecap="round"
+        strokeDasharray={`${(pct / 100) * c} ${c}`} />
+      <text x="50%" y="50%" dy="0.35em" textAnchor="middle" className="fill-brand-800 font-extrabold"
+        fontSize={size / 3.6} transform={`rotate(90 ${size / 2} ${size / 2})`}>{pct}%</text>
+    </svg>
+  );
+}
+
+export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, onOpenProblem }) {
+  const { progress, syncState } = useProgress();
+  const { user } = useAuth();
   const practiceTopics = TOPICS.filter((t) => t.questions.length > 0).length;
+
+  // --- dashboard numbers (one progress store → every meter agrees) ---
+  const articlesDone = articleDoneCount(progress, TOPICS.map((t) => t.slug));
+  const problemsSolved = problemSolvedCount(progress, PROBLEMS.map((p) => p.id));
+  const planTotals = PLANS.map((plan) => ({
+    plan,
+    total: planItemCount(plan),
+    done: plan.chapters.flatMap((c) => c.items).filter((it) => isPlanItemDone(progress, plan, it)).length,
+  }));
+  const planItemsTotal = planTotals.reduce((n, x) => n + x.total, 0);
+  const planItemsDone = planTotals.reduce((n, x) => n + x.done, 0);
+
+  // Continue where you left off: next unfinished guide, else next problem.
+  const nextTopic = TOPICS.find((t) => !isArticleDone(progress, t.slug));
+  const nextProblem = PROBLEMS.find((p) => !isProblemSolved(progress, p.id));
+  const started = articlesDone + problemsSolved + planItemsDone > 0;
+
+  const meter = (done, total) => (
+    <div className="h-2 rounded-full bg-brand-100 overflow-hidden mt-2">
+      <div className="h-full rounded-full bg-brand-600 transition-all duration-500" style={{ width: `${total ? (done / total) * 100 : 0}%` }} />
+    </div>
+  );
 
   return (
     <div>
@@ -14,15 +58,16 @@ export default function Home({ onNotes, onMock, onPlayground }) {
             InterviewPrep <span className="text-amber-300 text-2xl md:text-4xl align-middle font-bold">by Ayushi Singh</span>
           </h1>
           <p className="mt-4 max-w-2xl text-brand-50/90 text-lg leading-relaxed">
-            Notes that read like notes — highlighted, example-first, in speakable language — plus a mock-interview room
-            where an AI interviewer asks you questions <em>out loud</em>. Built from my own full-stack interview preparation.
+            Notes that read like notes — highlighted, example-first, in speakable language — a DSA sheet you
+            solve in the browser, study plans that tick themselves, and a mock-interview room where an AI
+            interviewer asks you questions <em>out loud</em>.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <button onClick={() => onNotes('javascript')} className="bg-white text-brand-800 font-bold px-6 py-3 rounded-xl shadow-card hover:bg-brand-50 transition">
               📚 Start reading
             </button>
-            <button onClick={() => onPlayground()} className="bg-brand-600 text-white font-bold px-6 py-3 rounded-xl shadow-card ring-2 ring-white/40 hover:bg-brand-500 transition">
-              ▶ Run Code
+            <button onClick={onSheet} className="bg-brand-600 text-white font-bold px-6 py-3 rounded-xl shadow-card ring-2 ring-white/40 hover:bg-brand-500 transition">
+              🧩 Solve DSA
             </button>
             <button onClick={() => onMock()} className="bg-amber-400 text-amber-950 font-bold px-6 py-3 rounded-xl shadow-card hover:bg-amber-300 transition">
               🎤 Enter the mock room
@@ -31,9 +76,9 @@ export default function Home({ onNotes, onMock, onPlayground }) {
           <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-3 max-w-2xl">
             {[
               [`${TOPICS.length}`, 'topic guides'],
+              [`${PROBLEMS.length}`, 'DSA problems'],
               [`${TOTAL_QUESTIONS}+`, 'mock questions'],
-              [`${practiceTopics}`, 'practice decks'],
-              ['1', 'AI interviewer'],
+              [`${PLANS.length}`, 'study plans'],
             ].map(([n, l]) => (
               <div key={l} className="bg-white/10 rounded-xl px-4 py-3 backdrop-blur">
                 <p className="text-2xl font-extrabold">{n}</p>
@@ -44,8 +89,53 @@ export default function Home({ onNotes, onMock, onPlayground }) {
         </div>
       </section>
 
+      {/* Continue learning dashboard */}
+      <section className="max-w-7xl mx-auto px-4 -mt-8 relative z-10">
+        <div className="bg-white rounded-3xl border border-brand-100 shadow-card p-6 md:p-7">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-xl font-extrabold text-brand-900">
+              {user ? `Welcome back, ${user.name.split(/\s+/)[0]} 👋` : 'Your progress 👋'}
+            </h2>
+            <span className="text-xs font-bold rounded-full bg-brand-50 border border-brand-200 text-brand-800 px-2.5 py-1">
+              {syncState === 'synced' ? '☁️ Synced to your profile ✓'
+                : syncState === 'syncing' ? '☁️ Syncing…'
+                : syncState === 'error' ? '☁️ Sync will retry shortly'
+                : 'Guest mode — create a profile to sync across devices'}
+            </span>
+            {nextTopic ? (
+              <button onClick={() => onNotes(nextTopic.slug)} className="btn-primary ml-auto text-sm">
+                Continue: {nextTopic.emoji} {nextTopic.title} →
+              </button>
+            ) : nextProblem ? (
+              <button onClick={() => onOpenProblem(nextProblem.id)} className="btn-primary ml-auto text-sm">
+                Next problem: {nextProblem.title} →
+              </button>
+            ) : (
+              <span className="ml-auto text-sm font-bold text-brand-700">🎉 Course + sheet complete — amazing!</span>
+            )}
+          </div>
+          <div className="grid sm:grid-cols-3 gap-4 mt-5">
+            <button onClick={() => onNotes()} className="card-hover text-left rounded-2xl border border-brand-100 bg-[#fbfdfc] p-4 shadow-card">
+              <p className="font-extrabold text-brand-900">📚 Notes <span className="float-right text-brand-800">{articlesDone}/{TOPICS.length}</span></p>
+              {meter(articlesDone, TOPICS.length)}
+              <p className="text-xs font-semibold text-slate-500 mt-2">{started ? 'Guides marked complete' : 'Read a guide, tick it complete'}</p>
+            </button>
+            <button onClick={onSheet} className="card-hover text-left rounded-2xl border border-brand-100 bg-[#fbfdfc] p-4 shadow-card">
+              <p className="font-extrabold text-brand-900">🧩 DSA Sheet <span className="float-right text-brand-800">{problemsSolved}/{PROBLEMS.length}</span></p>
+              {meter(problemsSolved, PROBLEMS.length)}
+              <p className="text-xs font-semibold text-slate-500 mt-2">Problems solved in the browser judge</p>
+            </button>
+            <button onClick={onPlans} className="card-hover text-left rounded-2xl border border-brand-100 bg-[#fbfdfc] p-4 shadow-card">
+              <p className="font-extrabold text-brand-900">📋 Study Plans <span className="float-right text-brand-800">{planItemsDone}/{planItemsTotal}</span></p>
+              {meter(planItemsDone, planItemsTotal)}
+              <p className="text-xs font-semibold text-slate-500 mt-2">Plan items ticked (many tick themselves)</p>
+            </button>
+          </div>
+        </div>
+      </section>
+
       {/* Topics strip — GFG-style quick-jump pills */}
-      <section className="bg-white border-b border-brand-100">
+      <section className="bg-white border-b border-brand-100 mt-8">
         <div className="max-w-7xl mx-auto px-4 py-5">
           <div className="flex items-center gap-3 overflow-x-auto nice-scroll pb-1">
             <span className="text-sm font-extrabold text-brand-900 whitespace-nowrap">Tutorials:</span>
@@ -53,9 +143,10 @@ export default function Home({ onNotes, onMock, onPlayground }) {
               <button key={t.slug} onClick={() => onNotes(t.slug)}
                 className="whitespace-nowrap rounded-full border border-brand-200 bg-brand-50 px-3.5 py-1.5 text-sm font-semibold text-brand-800 transition hover:bg-brand-600 hover:text-white hover:border-brand-600">
                 {t.emoji} {t.title}
+                {isArticleDone(progress, t.slug) && <span className="ml-1.5 text-brand-600 font-extrabold">✓</span>}
               </button>
             ))}
-            <button onClick={() => onPlayground()}
+            <button onClick={onPlayground}
               className="whitespace-nowrap rounded-full bg-brand-600 px-3.5 py-1.5 text-sm font-bold text-white transition hover:bg-brand-700">
               ▶ Code Playground
             </button>
@@ -63,59 +154,89 @@ export default function Home({ onNotes, onMock, onPlayground }) {
         </div>
       </section>
 
-      {/* Topic cards */}
+      {/* Study plan cards */}
       <section className="max-w-7xl mx-auto px-4 py-12">
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <h2 className="text-2xl md:text-3xl font-extrabold text-brand-900">Study plans 📋</h2>
+            <p className="text-slate-600 mt-1">LeetCode-style plans — chapters of real work on this site, ticking themselves off as you go.</p>
+          </div>
+          <button onClick={onPlans} className="btn-outline ml-auto text-sm">All study plans →</button>
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-7">
+          {planTotals.map(({ plan, total, done }) => {
+            const pct = total ? Math.round((done / total) * 100) : 0;
+            const isStarted = Boolean(progress.planStart?.[plan.id]) || done > 0;
+            return (
+              <button key={plan.id} onClick={onPlans}
+                className="card-hover text-left bg-white rounded-2xl border border-brand-100 shadow-card p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-3xl">{plan.emoji}</span>
+                  {isStarted && <Ring pct={pct} />}
+                </div>
+                <h3 className="font-extrabold text-lg text-slate-900 mt-3">{plan.title}</h3>
+                <p className="text-sm text-slate-600 mt-1 leading-relaxed line-clamp-2">{plan.tagline}</p>
+                <p className="text-xs font-bold text-brand-600 mt-3">
+                  {total} items · {plan.chapters.length} chapters{isStarted ? ` · ${done} done` : ''} →
+                </p>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Topic cards */}
+      <section className="max-w-7xl mx-auto px-4 pb-12">
         <h2 className="text-2xl md:text-3xl font-extrabold text-brand-900">Pick a topic, read it like notes 📖</h2>
         <p className="text-slate-600 mt-1">Every guide ends with mock questions and a 60-second revision checklist.</p>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-7">
-          {TOPICS.map((t) => (
-            <button key={t.slug} onClick={() => onNotes(t.slug)}
-              className="text-left bg-white rounded-2xl border border-brand-100 shadow-card p-5 hover:-translate-y-0.5 hover:border-brand-300 transition">
-              <div className="flex items-start justify-between">
-                <span className="text-3xl">{t.emoji}</span>
-                {t.isNew && <span className="text-[0.65rem] font-extrabold bg-amber-400 text-amber-950 px-2 py-0.5 rounded-full">NEW</span>}
-              </div>
-              <h3 className="font-bold text-lg text-slate-900 mt-3 leading-snug">{t.title}</h3>
-              <p className="text-sm text-slate-600 mt-1.5 leading-relaxed">{t.blurb}</p>
-              <p className="text-xs font-bold text-brand-600 mt-3">
-                {t.questions.length > 0 ? `🎤 ${t.questions.length} mock questions inside` : '📖 Read the guide'} →
-              </p>
-            </button>
-          ))}
+          {TOPICS.map((t) => {
+            const doneGuide = isArticleDone(progress, t.slug);
+            return (
+              <button key={t.slug} onClick={() => onNotes(t.slug)}
+                className="card-hover text-left bg-white rounded-2xl border border-brand-100 shadow-card p-5">
+                <div className="flex items-start justify-between">
+                  <span className="text-3xl">{t.emoji}</span>
+                  {doneGuide
+                    ? <span className="text-[0.65rem] font-extrabold bg-brand-600 text-white px-2 py-0.5 rounded-full">✓ DONE</span>
+                    : t.isNew && <span className="text-[0.65rem] font-extrabold bg-amber-400 text-amber-950 px-2 py-0.5 rounded-full">NEW</span>}
+                </div>
+                <h3 className="font-bold text-lg text-slate-900 mt-3 leading-snug">{t.title}</h3>
+                <p className="text-sm text-slate-600 mt-1.5 leading-relaxed">{t.blurb}</p>
+                <p className="text-xs font-bold text-brand-600 mt-3">
+                  {t.group} · {t.questions.length > 0 ? `🎤 ${t.questions.length} mock questions` : '📖 Guide'} →
+                </p>
+              </button>
+            );
+          })}
         </div>
       </section>
 
-      {/* Code Playground CTA */}
-      <section className="max-w-7xl mx-auto px-4 pb-12">
-        <div className="rounded-3xl bg-slate-900 text-white p-7 md:p-10 shadow-card flex flex-col md:flex-row gap-6 md:items-center overflow-hidden">
-          <div className="font-mono text-sm leading-relaxed text-slate-300 shrink-0 hidden sm:block" aria-hidden="true">
-            <p><span className="text-brand-300">const</span> skills = <span className="text-amber-300">"reading"</span>;</p>
-            <p>skills = <span className="text-amber-300">"running code"</span>;</p>
-            <p className="text-brand-300">console.log(<span className="text-amber-300">"output →"</span>, skills);</p>
-          </div>
-          <div className="flex-1">
-            <h2 className="text-2xl font-extrabold">Don&apos;t just read it — run it ▶</h2>
-            <p className="text-slate-300 mt-2 leading-relaxed max-w-xl">
-              The Code Playground is a full compiler in your browser: write JavaScript or SQL,
-              hit Run, and watch the output. Every snippet from the notes is one click away.
-            </p>
-          </div>
-          <button onClick={() => onPlayground()}
-            className="bg-brand-600 hover:bg-brand-500 text-white font-bold px-6 py-3.5 rounded-xl shadow-card transition shrink-0">
-            ▶ Open Code Playground
-          </button>
-        </div>
-      </section>
-
-      {/* How to use */}
+      {/* Features strip */}
       <section className="bg-white border-y border-brand-100">
         <div className="max-w-7xl mx-auto px-4 py-12">
-          <h2 className="text-2xl font-extrabold text-brand-900">The 3-pass method 🗺️</h2>
+          <h2 className="text-2xl font-extrabold text-brand-900">Everything you need, one site ✨</h2>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+            {[
+              ['📚', 'Notes that read like notes', `${TOPICS.length} highlighted guides with visuals & runnable code.`, () => onNotes('javascript')],
+              ['🧩', 'DSA Sheet', `${PROBLEMS.length} problems — explain, code, run tests, submit.`, onSheet],
+              ['🎤', 'Live mock interview', 'Ananya asks out loud, follows up, and grades you.', () => onMock()],
+              ['▶', 'Run Code', 'A JavaScript + SQL compiler in your browser. Ctrl+Enter and go.', onPlayground],
+            ].map(([icon, title, body, go]) => (
+              <button key={title} onClick={go} className="card-hover text-left rounded-2xl bg-[#fbfdfc] border border-brand-100 p-5 shadow-card">
+                <span className="text-3xl">{icon}</span>
+                <h3 className="font-bold text-brand-900 mt-3">{title}</h3>
+                <p className="text-sm text-slate-600 mt-1.5 leading-relaxed">{body}</p>
+              </button>
+            ))}
+          </div>
+
+          <h2 className="text-2xl font-extrabold text-brand-900 mt-12">The 3-pass method 🗺️</h2>
           <div className="grid md:grid-cols-3 gap-4 mt-6">
             {[
               ['1️⃣ Read', 'Read one guide end-to-end (30–45 min). Don’t memorise — understand. The highlight boxes are the interview traps.'],
-              ['2️⃣ Say it out loud', 'Close the guide and explain each topic like the interviewer just asked. Where you stumble = what to re-read.'],
-              ['3️⃣ Get interviewed', 'Attempt the mock questions at the end, then enter the mock room — the AI asks, follows up, and scores you.'],
+              ['2️⃣ Say it + solve it', 'Explain each topic out loud, then prove it on the DSA Sheet — code it, run the tests, submit.'],
+              ['3️⃣ Get interviewed', 'Attempt the mock questions, follow a study plan, then enter the mock room — the AI asks, follows up, and scores you.'],
             ].map(([h, b]) => (
               <div key={h} className="rounded-2xl bg-[#fbfdfc] border border-brand-100 p-5 shadow-card">
                 <h3 className="font-bold text-brand-900">{h}</h3>
@@ -126,7 +247,7 @@ export default function Home({ onNotes, onMock, onPlayground }) {
         </div>
       </section>
 
-      {/* Author footer */}
+      {/* Author section */}
       <footer className="max-w-7xl mx-auto px-4 py-12">
         <div className="bg-brand-900 text-white rounded-3xl p-7 md:p-10 flex flex-col md:flex-row gap-6 md:items-center shadow-card">
           <div className="w-16 h-16 rounded-2xl bg-white grid place-items-center shrink-0 shadow-card">
@@ -141,12 +262,12 @@ export default function Home({ onNotes, onMock, onPlayground }) {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <a className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-sm font-semibold" href="https://www.linkedin.com/in/ayushi0618/" target="_blank" rel="noreferrer">LinkedIn ↗</a>
-            <a className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-sm font-semibold" href="https://ayushi-tech-06181.vercel.app" target="_blank" rel="noreferrer">Portfolio ↗</a>
-            <a className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-sm font-semibold" href="https://github.com/ayushi0618" target="_blank" rel="noreferrer">GitHub ↗</a>
+            <a className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-sm font-semibold transition" href="https://www.linkedin.com/in/ayushi0618/" target="_blank" rel="noreferrer">LinkedIn ↗</a>
+            <a className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-sm font-semibold transition" href="https://ayushi-tech-06181.vercel.app" target="_blank" rel="noreferrer">Portfolio ↗</a>
+            <a className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-sm font-semibold transition" href="https://github.com/ayushi0618" target="_blank" rel="noreferrer">GitHub ↗</a>
           </div>
         </div>
-        <p className="text-center text-xs text-slate-400 mt-6">InterviewPrep by Ayushi Singh · Made with ☕ and real interview prep · Good luck — go get the offer 🚀</p>
+        <p className="text-center text-xs text-slate-400 mt-6">{practiceTopics} practice decks · InterviewPrep by Ayushi Singh · Made with ☕ and real interview prep 🚀</p>
       </footer>
     </div>
   );

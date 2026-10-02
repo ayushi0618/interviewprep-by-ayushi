@@ -16,6 +16,14 @@ If you're a student or fresher preparing for full-stack / SDE interviews — **p
 
 🎯 **Practice mode** — pick a topic, get timed question cards, rate yourself honestly (Knew it / Shaky / Missed), and watch your score history improve. 119 questions and counting.
 
+🧩 **DSA Sheet** — 41 classic problems across 12 patterns (arrays → DP). Read the explanation, write your solution in the browser, run the test cases, hit submit — it judges your code right there, tracks your attempts, and restores your last attempt when you come back.
+
+📋 **Study plans** — LeetCode-style plans (SQL 50, JavaScript 30, DSA 75, React 25, Backend 30, TypeScript 15, CS Fundamentals 20, Top Interview 60). Chapters of real work on this site — and most items tick themselves the moment you actually do them.
+
+📈 **A course track that remembers** — mark guides complete, watch the sidebar fill up, and pick up exactly where you left off from the home dashboard.
+
+👤 **Your own profile (optional)** — create a free account and your progress syncs across devices: guides done, problems solved (per topic), plans in progress, mock interviews taken. Guest mode always works too — a profile is an upgrade, never a wall.
+
 🤖 **Live AI mock interview** — this is my favourite part. Turn your camera on, the interviewer *speaks* a question out loud, you answer with your voice, it follows up on what you said — and at the end you get a report card: what you covered, what you missed, and which topics to revise. Nothing is recorded or uploaded; your camera is only a mirror. Practise at 2 AM, no senior required.
 
 ---
@@ -60,11 +68,22 @@ npm start        # http://localhost:10000 (or your PORT)
 GEMINI_API_KEY=your_key_here
 ```
 
+**Optional — accounts & progress sync:** profiles work out of the box with zero setup (accounts are stored in a local JSON file, `server/data/users.json`). If you want them in MongoDB instead, just set:
+
+```
+MONGO_URI=your_mongodb_connection_string
+JWT_SECRET=any_long_random_string
+```
+
+With `MONGO_URI` set but unreachable, the server logs it and falls back to the JSON file — it never crashes over storage. `JWT_SECRET` signs login tokens; if it's unset, a random dev secret is generated (logins then reset when the server restarts), so set it anywhere real.
+
+Passwords are bcrypt-hashed, never stored or returned in plain text.
+
 ---
 
 ## 🛠️ Built with
 
-React 18 · Vite · Tailwind CSS · Express · the browser's own voice & camera APIs (Speech Recognition + Speech Synthesis) · optional Google Gemini · deployed on Render
+React 18 · Vite · Tailwind CSS · Express · MongoDB (optional, via Mongoose) + bcrypt/JWT for accounts · the browser's own voice & camera APIs (Speech Recognition + Speech Synthesis) · optional Google Gemini · deployed on Render
 
 ## 🤝 For students, by a student
 
