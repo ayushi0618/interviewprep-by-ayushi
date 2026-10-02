@@ -1,63 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import { loadSqlJs, createSeededDb, SEED_COLUMNS, SEED_ROWS } from '../../lib/sqlEngine';
 
-/**
- * SqlPlayground — runnable SQL against an in-memory SQLite database.
- *
- * Engine: sql.js (SQLite compiled to WebAssembly), loaded lazily from CDN
- * on mount — no npm dependency. The load promise is cached at module level
- * so every playground on the page shares a single download. Each instance
- * gets its own DB seeded with a `students` table (previewed above the
- * editor); Reset rebuilds the DB and restores the starter query.
- */
-
-const SQL_JS_SCRIPT = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js';
-const SQL_JS_WASM = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.wasm';
-
-// Module-level cache: one CDN load shared by all playgrounds on the page.
-let sqlJsPromise = null;
-
-function loadSqlJs() {
-  if (sqlJsPromise) return sqlJsPromise;
-  sqlJsPromise = new Promise((resolve, reject) => {
-    const init = () => window.initSqlJs({ locateFile: () => SQL_JS_WASM }).then(resolve, reject);
-    if (typeof window.initSqlJs === 'function') { init(); return; }
-    const script = document.createElement('script');
-    script.src = SQL_JS_SCRIPT;
-    script.onload = init;
-    script.onerror = () => reject(new Error('Failed to load sql.js from CDN'));
-    document.head.appendChild(script);
-  });
-  // Don't cache a failure — a later mount or retry may succeed.
-  sqlJsPromise.catch(() => { sqlJsPromise = null; });
-  return sqlJsPromise;
-}
-
-// Seed data: 10 students across Indian cities and common courses.
-const SEED_COLUMNS = ['id', 'name', 'city', 'course', 'marks'];
-const SEED_ROWS = [
-  [1, 'Aarav Sharma', 'Delhi', 'B.Tech CSE', 92],
-  [2, 'Priya Patel', 'Mumbai', 'B.Tech CSE', 88],
-  [3, 'Rohan Mehta', 'Pune', 'BCA', 76],
-  [4, 'Ananya Gupta', 'Jaipur', 'MCA', 95],
-  [5, 'Vikram Singh', 'Lucknow', 'B.Tech ECE', 67],
-  [6, 'Kavya Nair', 'Indore', 'B.Sc CS', 84],
-  [7, 'Arjun Verma', 'Delhi', 'B.Tech CSE', 58],
-  [8, 'Meera Iyer', 'Mumbai', 'MCA', 97],
-  [9, 'Karan Malhotra', 'Pune', 'B.Tech ECE', 73],
-  [10, 'Ishita Bose', 'Jaipur', 'BCA', 81],
-];
-
-function createSeededDb(SQL) {
-  const db = new SQL.Database();
-  db.run(`CREATE TABLE students (
-    id INTEGER PRIMARY KEY, name TEXT, city TEXT, course TEXT, marks INTEGER
-  );`);
-  const stmt = db.prepare('INSERT INTO students (id, name, city, course, marks) VALUES (?, ?, ?, ?, ?)');
-  SEED_ROWS.forEach((row) => stmt.run(row));
-  stmt.free();
-  return db;
-}
-
+// SqlPlayground — runnable SQL against an in-memory SQLite database.
+// The engine + seed data live in lib/sqlEngine.js (shared with the
+// full-page Code Playground). Each mounted playground gets its OWN
+// database, so one card's INSERTs never leak into another card.
 export default function SqlPlayground({ title, code }) {
   const starterSql = code ?? '';
   const [sqlText, setSqlText] = useState(starterSql);
@@ -115,10 +62,10 @@ export default function SqlPlayground({ title, code }) {
 
   return (
     <div className="my-5 overflow-hidden rounded-xl border border-brand-200 bg-white shadow-card">
-      {/* Header: badge + title + controls */}
+      {/* Header: unmistakable "you can run this" badge + title + controls */}
       <div className="flex flex-wrap items-center gap-2 border-b border-brand-100 bg-brand-50 px-4 py-2.5">
         <span className="rounded-md bg-brand-600 px-2 py-0.5 text-[0.7rem] font-bold uppercase tracking-wide text-white">
-          🗄️ Live SQL
+          ▶ Try it yourself — edit &amp; run
         </span>
         <h4 className="m-0 text-sm font-bold text-brand-900">{title}</h4>
         <div className="ml-auto flex items-center gap-2">

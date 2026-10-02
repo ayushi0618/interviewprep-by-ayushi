@@ -21,7 +21,7 @@ body { @apply bg-[#f6f7f4] text-ink font-sans antialiased; }
   @apply text-3xl md:text-4xl font-extrabold text-brand-900 leading-tight mt-2 mb-5;
 }
 .article-body h2 {
-  @apply text-2xl font-bold text-brand-900 mt-10 mb-4 pb-2 border-b-2 border-brand-100;
+  @apply text-2xl font-bold text-brand-900 mt-10 mb-4 pl-3 border-l-4 border-brand-500;
 }
 .article-body h3 { @apply text-xl font-bold text-slate-900 mt-8 mb-3; }
 .article-body h4 { @apply text-lg font-semibold text-slate-900 mt-6 mb-2; }

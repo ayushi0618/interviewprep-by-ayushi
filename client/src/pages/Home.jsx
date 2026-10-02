@@ -1,6 +1,7 @@
 import { TOPICS, TOTAL_QUESTIONS } from '../content/topics';
+import Logo from '../components/Logo';
 
-export default function Home({ onNotes, onMock }) {
+export default function Home({ onNotes, onMock, onPlayground }) {
   const practiceTopics = TOPICS.filter((t) => t.questions.length > 0).length;
 
   return (
@@ -20,6 +21,9 @@ export default function Home({ onNotes, onMock }) {
             <button onClick={() => onNotes('javascript')} className="bg-white text-brand-800 font-bold px-6 py-3 rounded-xl shadow-card hover:bg-brand-50 transition">
               📚 Start reading
             </button>
+            <button onClick={() => onPlayground()} className="bg-brand-600 text-white font-bold px-6 py-3 rounded-xl shadow-card ring-2 ring-white/40 hover:bg-brand-500 transition">
+              ▶ Run Code
+            </button>
             <button onClick={() => onMock()} className="bg-amber-400 text-amber-950 font-bold px-6 py-3 rounded-xl shadow-card hover:bg-amber-300 transition">
               🎤 Enter the mock room
             </button>
@@ -36,6 +40,25 @@ export default function Home({ onNotes, onMock }) {
                 <p className="text-brand-100 text-sm">{l}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Topics strip — GFG-style quick-jump pills */}
+      <section className="bg-white border-b border-brand-100">
+        <div className="max-w-7xl mx-auto px-4 py-5">
+          <div className="flex items-center gap-3 overflow-x-auto nice-scroll pb-1">
+            <span className="text-sm font-extrabold text-brand-900 whitespace-nowrap">Tutorials:</span>
+            {TOPICS.map((t) => (
+              <button key={t.slug} onClick={() => onNotes(t.slug)}
+                className="whitespace-nowrap rounded-full border border-brand-200 bg-brand-50 px-3.5 py-1.5 text-sm font-semibold text-brand-800 transition hover:bg-brand-600 hover:text-white hover:border-brand-600">
+                {t.emoji} {t.title}
+              </button>
+            ))}
+            <button onClick={() => onPlayground()}
+              className="whitespace-nowrap rounded-full bg-brand-600 px-3.5 py-1.5 text-sm font-bold text-white transition hover:bg-brand-700">
+              ▶ Code Playground
+            </button>
           </div>
         </div>
       </section>
@@ -62,6 +85,28 @@ export default function Home({ onNotes, onMock }) {
         </div>
       </section>
 
+      {/* Code Playground CTA */}
+      <section className="max-w-7xl mx-auto px-4 pb-12">
+        <div className="rounded-3xl bg-slate-900 text-white p-7 md:p-10 shadow-card flex flex-col md:flex-row gap-6 md:items-center overflow-hidden">
+          <div className="font-mono text-sm leading-relaxed text-slate-300 shrink-0 hidden sm:block" aria-hidden="true">
+            <p><span className="text-brand-300">const</span> skills = <span className="text-amber-300">"reading"</span>;</p>
+            <p>skills = <span className="text-amber-300">"running code"</span>;</p>
+            <p className="text-brand-300">console.log(<span className="text-amber-300">"output →"</span>, skills);</p>
+          </div>
+          <div className="flex-1">
+            <h2 className="text-2xl font-extrabold">Don&apos;t just read it — run it ▶</h2>
+            <p className="text-slate-300 mt-2 leading-relaxed max-w-xl">
+              The Code Playground is a full compiler in your browser: write JavaScript or SQL,
+              hit Run, and watch the output. Every snippet from the notes is one click away.
+            </p>
+          </div>
+          <button onClick={() => onPlayground()}
+            className="bg-brand-600 hover:bg-brand-500 text-white font-bold px-6 py-3.5 rounded-xl shadow-card transition shrink-0">
+            ▶ Open Code Playground
+          </button>
+        </div>
+      </section>
+
       {/* How to use */}
       <section className="bg-white border-y border-brand-100">
         <div className="max-w-7xl mx-auto px-4 py-12">
@@ -84,7 +129,9 @@ export default function Home({ onNotes, onMock }) {
       {/* Author footer */}
       <footer className="max-w-7xl mx-auto px-4 py-12">
         <div className="bg-brand-900 text-white rounded-3xl p-7 md:p-10 flex flex-col md:flex-row gap-6 md:items-center shadow-card">
-          <div className="w-16 h-16 rounded-2xl bg-amber-400 text-brand-900 grid place-items-center text-3xl shrink-0">👩‍💻</div>
+          <div className="w-16 h-16 rounded-2xl bg-white grid place-items-center shrink-0 shadow-card">
+            <Logo size={52} />
+          </div>
           <div className="flex-1">
             <p className="text-brand-300 text-xs font-extrabold tracking-widest">ABOUT THE AUTHOR</p>
             <h3 className="text-xl font-extrabold mt-1">Ayushi Singh</h3>

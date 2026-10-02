@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState } from 'react';
 import { TOPICS, ALL_QUESTIONS } from '../content/topics';
+import Logo from './Logo';
 
-// Top bar: brand, main navigation, and a search box that filters both
-// topics and practice questions (results jump to the article or the
-// practice room for that topic).
-export default function Navbar({ route, onHome, onNotes, onMock, onPracticeTopic }) {
+// Top bar: the ONE InterviewPrep logo, main navigation, and a search box
+// that filters both topics and practice questions (results jump to the
+// article or the practice room for that topic).
+export default function Navbar({ route, onHome, onNotes, onMock, onPlayground, onPracticeTopic }) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const inputRef = useRef(null);
@@ -21,10 +22,10 @@ export default function Navbar({ route, onHome, onNotes, onMock, onPracticeTopic
     `px-3 py-2 rounded-lg text-sm font-semibold transition ${active ? 'bg-brand-700 text-white' : 'text-brand-900 hover:bg-brand-100'}`;
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-brand-100 shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 h-16 flex items-center gap-3">
-        <button onClick={onHome} className="flex items-center gap-2.5 shrink-0 text-left">
-          <span className="w-9 h-9 rounded-xl bg-brand-600 text-white grid place-items-center text-lg font-extrabold">IP</span>
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b-2 border-brand-600 shadow-sm">
+      <div className="max-w-7xl mx-auto px-4 h-14 flex items-center gap-3">
+        <button onClick={onHome} className="flex items-center gap-2.5 shrink-0 text-left" aria-label="InterviewPrep — home">
+          <Logo size={34} />
           <span className="leading-tight">
             <span className="block font-extrabold text-brand-900 text-[1.05rem]">InterviewPrep</span>
             <span className="block text-[0.7rem] font-semibold text-brand-600 -mt-0.5">by Ayushi Singh</span>
@@ -33,6 +34,7 @@ export default function Navbar({ route, onHome, onNotes, onMock, onPracticeTopic
 
         <nav className="hidden md:flex items-center gap-1 ml-4">
           <button className={linkCls(route.name === 'notes')} onClick={() => onNotes()}>📚 Notes</button>
+          <button className={linkCls(route.name === 'playground')} onClick={() => onPlayground()}>▶ Run Code</button>
           <button className={linkCls(route.name === 'mock')} onClick={() => onMock()}>🎤 Mock Interview</button>
         </nav>
 
@@ -71,6 +73,7 @@ export default function Navbar({ route, onHome, onNotes, onMock, onPracticeTopic
 
         <nav className="flex md:hidden items-center gap-1">
           <button className={linkCls(route.name === 'notes')} onClick={() => onNotes()}>📚</button>
+          <button className={linkCls(route.name === 'playground')} onClick={() => onPlayground()}>▶</button>
           <button className={linkCls(route.name === 'mock')} onClick={() => onMock()}>🎤</button>
         </nav>
       </div>

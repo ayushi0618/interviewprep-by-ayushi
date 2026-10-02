@@ -110,6 +110,22 @@ console.log(c); // ❌ ReferenceError — const stays inside too
 
 **🎤 What the interviewer actually asks:** *"Difference between var, let and const?"* — answer with scope first, then hoisting/TDZ, then reassignment. And *"Can I change a const object?"* — yes, mutate yes, reassign no.
 
+```playground Predict it first: var vs let in a loop
+// Predict EVERY line before you press Run — then check yourself.
+// The var loop and the let loop do NOT print the same thing!
+
+for (var i = 0; i < 3; i++) {
+  setTimeout(() => console.log("var i:", i), 0);
+}
+for (let j = 0; j < 3; j++) {
+  setTimeout(() => console.log("let j:", j), 0);
+}
+
+// And two typeof traps from the section above:
+console.log("typeof null:", typeof null);
+console.log("1 + '2' =", 1 + "2", "| '5' - 2 =", "5" - 2);
+```
+
 ---
 
 ## 📌 3. Hoisting
