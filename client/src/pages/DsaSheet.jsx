@@ -8,7 +8,7 @@
 // Plain student voice on purpose: these are my own practice sheets, written
 // the way I would explain them in an interview.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DSA_TOPICS, PROBLEMS, problemsByTopic } from '../data/dsaSheet';
 import { useProgress } from '../lib/progress.jsx';
 import { isProblemSolved } from '../lib/progress';
@@ -36,6 +36,25 @@ export default function DsaSheet({ onOpenProblem }) {
   const { progress } = useProgress();
   const [statusFilter, setStatusFilter] = useState('All');
   const [difficultyFilter, setDifficultyFilter] = useState('All');
+
+  // Roadmap jump: Roadmap.jsx stashes a topic id in sessionStorage
+  // ("ip_sheet_focus") before routing here. On mount, read + clear it and
+  // scroll that topic's section into view. The small delay lets the app's
+  // route-change scroll-to-top settle first so this scroll wins.
+  useEffect(() => {
+    let topicId = null;
+    try {
+      topicId = sessionStorage.getItem('ip_sheet_focus');
+      if (topicId) sessionStorage.removeItem('ip_sheet_focus');
+    } catch {
+      /* storage unavailable — nothing to focus */
+    }
+    if (!topicId) return undefined;
+    const timer = setTimeout(() => {
+      document.getElementById(`topic-${topicId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 150);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Overall progress for the header — solved X out of every problem on the sheet.
   const solvedCount = useMemo(
@@ -152,7 +171,8 @@ export default function DsaSheet({ onOpenProblem }) {
             return (
               <section
                 key={topic.id}
-                className="bg-white rounded-2xl border border-brand-100 shadow-card overflow-hidden"
+                id={`topic-${topic.id}`}
+                className="bg-white rounded-2xl border border-brand-100 shadow-card overflow-hidden scroll-mt-24"
               >
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-brand-100 bg-brand-50/70 px-5 py-3.5">
                   <h2 className="font-extrabold text-brand-900">

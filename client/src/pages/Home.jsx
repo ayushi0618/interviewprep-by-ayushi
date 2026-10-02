@@ -12,8 +12,8 @@ function Ring({ pct, size = 52, stroke = 5 }) {
   const c = 2 * Math.PI * r;
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90 shrink-0">
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#daeee0" strokeWidth={stroke} />
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#308d46" strokeWidth={stroke} strokeLinecap="round"
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#ECE8F9" strokeWidth={stroke} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#7C6BD9" strokeWidth={stroke} strokeLinecap="round"
         strokeDasharray={`${(pct / 100) * c} ${c}`} />
       <text x="50%" y="50%" dy="0.35em" textAnchor="middle" className="fill-brand-800 font-extrabold"
         fontSize={size / 3.6} transform={`rotate(90 ${size / 2} ${size / 2})`}>{pct}%</text>
@@ -21,10 +21,11 @@ function Ring({ pct, size = 52, stroke = 5 }) {
   );
 }
 
-export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, onOpenProblem }) {
+export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, onOpenProblem, onProblems, onRoadmap }) {
   const { progress, syncState } = useProgress();
   const { user } = useAuth();
   const practiceTopics = TOPICS.filter((t) => t.questions.length > 0).length;
+  const groups = [...new Set(TOPICS.map((t) => t.group))];
 
   // --- dashboard numbers (one progress store → every meter agrees) ---
   const articlesDone = articleDoneCount(progress, TOPICS.map((t) => t.slug));
@@ -48,31 +49,35 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
     </div>
   );
 
+  const goProblems = onProblems || onSheet;
+  const goRoadmap = onRoadmap || onPlans;
+
   return (
     <div>
-      {/* Hero */}
-      <section className="bg-gradient-to-b from-brand-800 via-brand-700 to-brand-600 text-white">
+      {/* Hero — soft lavender */}
+      <section className="bg-gradient-to-b from-brand-50 via-[#FCFAFF] to-white border-b border-brand-100">
         <div className="max-w-7xl mx-auto px-4 py-14 md:py-20">
-          <p className="text-brand-200 font-bold tracking-wide text-sm">FULL-STACK INTERVIEW PREPARATION</p>
-          <h1 className="text-4xl md:text-6xl font-extrabold leading-tight mt-3">
-            InterviewPrep <span className="text-amber-300 text-2xl md:text-4xl align-middle font-bold">by Ayushi Singh</span>
+          <p className="text-brand-600 font-bold tracking-wide text-sm">FULL-STACK INTERVIEW PREPARATION</p>
+          <h1 className="text-4xl md:text-6xl font-extrabold leading-tight mt-3 text-brand-900">
+            InterviewPrep <span className="text-brand-500 text-2xl md:text-4xl align-middle font-bold">by Ayushi Singh</span>
           </h1>
-          <p className="mt-4 max-w-2xl text-brand-50/90 text-lg leading-relaxed">
+          <p className="mt-4 max-w-2xl text-slate-600 text-lg leading-relaxed">
             Notes that read like notes — highlighted, example-first, in speakable language — a DSA sheet you
             solve in the browser, study plans that tick themselves, and a mock-interview room where an AI
             interviewer asks you questions <em>out loud</em>.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
-            <button onClick={() => onNotes('javascript')} className="bg-white text-brand-800 font-bold px-6 py-3 rounded-xl shadow-card hover:bg-brand-50 transition">
+            <button onClick={() => onNotes('javascript')} className="btn-primary px-6 py-3 text-base">
               📚 Start reading
-            </button>
-            <button onClick={onSheet} className="bg-brand-600 text-white font-bold px-6 py-3 rounded-xl shadow-card ring-2 ring-white/40 hover:bg-brand-500 transition">
-              🧩 Solve DSA
             </button>
             <button onClick={() => onMock()} className="bg-amber-400 text-amber-950 font-bold px-6 py-3 rounded-xl shadow-card hover:bg-amber-300 transition">
               🎤 Enter the mock room
             </button>
+            <button onClick={goProblems} className="btn-outline px-6 py-3 text-base">
+              🧩 Browse problems
+            </button>
           </div>
+          {/* Live-computed stats strip */}
           <div className="mt-10 grid grid-cols-2 md:grid-cols-4 gap-3 max-w-2xl">
             {[
               [`${TOPICS.length}`, 'topic guides'],
@@ -80,9 +85,9 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
               [`${TOTAL_QUESTIONS}+`, 'mock questions'],
               [`${PLANS.length}`, 'study plans'],
             ].map(([n, l]) => (
-              <div key={l} className="bg-white/10 rounded-xl px-4 py-3 backdrop-blur">
-                <p className="text-2xl font-extrabold">{n}</p>
-                <p className="text-brand-100 text-sm">{l}</p>
+              <div key={l} className="bg-white rounded-xl px-4 py-3 border border-brand-100 shadow-card">
+                <p className="text-2xl font-extrabold text-brand-900">{n}</p>
+                <p className="text-slate-500 text-sm">{l}</p>
               </div>
             ))}
           </div>
@@ -115,17 +120,17 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
             )}
           </div>
           <div className="grid sm:grid-cols-3 gap-4 mt-5">
-            <button onClick={() => onNotes()} className="card-hover text-left rounded-2xl border border-brand-100 bg-[#fbfdfc] p-4 shadow-card">
+            <button onClick={() => onNotes()} className="card-hover text-left rounded-2xl border border-brand-100 bg-white p-4 shadow-card">
               <p className="font-extrabold text-brand-900">📚 Notes <span className="float-right text-brand-800">{articlesDone}/{TOPICS.length}</span></p>
               {meter(articlesDone, TOPICS.length)}
               <p className="text-xs font-semibold text-slate-500 mt-2">{started ? 'Guides marked complete' : 'Read a guide, tick it complete'}</p>
             </button>
-            <button onClick={onSheet} className="card-hover text-left rounded-2xl border border-brand-100 bg-[#fbfdfc] p-4 shadow-card">
+            <button onClick={onSheet} className="card-hover text-left rounded-2xl border border-brand-100 bg-white p-4 shadow-card">
               <p className="font-extrabold text-brand-900">🧩 DSA Sheet <span className="float-right text-brand-800">{problemsSolved}/{PROBLEMS.length}</span></p>
               {meter(problemsSolved, PROBLEMS.length)}
               <p className="text-xs font-semibold text-slate-500 mt-2">Problems solved in the browser judge</p>
             </button>
-            <button onClick={onPlans} className="card-hover text-left rounded-2xl border border-brand-100 bg-[#fbfdfc] p-4 shadow-card">
+            <button onClick={onPlans} className="card-hover text-left rounded-2xl border border-brand-100 bg-white p-4 shadow-card">
               <p className="font-extrabold text-brand-900">📋 Study Plans <span className="float-right text-brand-800">{planItemsDone}/{planItemsTotal}</span></p>
               {meter(planItemsDone, planItemsTotal)}
               <p className="text-xs font-semibold text-slate-500 mt-2">Plan items ticked (many tick themselves)</p>
@@ -134,7 +139,7 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
         </div>
       </section>
 
-      {/* Topics strip — GFG-style quick-jump pills */}
+      {/* Topics strip — quick-jump pills */}
       <section className="bg-white border-b border-brand-100 mt-8">
         <div className="max-w-7xl mx-auto px-4 py-5">
           <div className="flex items-center gap-3 overflow-x-auto nice-scroll pb-1">
@@ -185,45 +190,51 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
         </div>
       </section>
 
-      {/* Topic cards */}
+      {/* Topic cards — grouped by TOPICS group */}
       <section className="max-w-7xl mx-auto px-4 pb-12">
         <h2 className="text-2xl md:text-3xl font-extrabold text-brand-900">Pick a topic, read it like notes 📖</h2>
         <p className="text-slate-600 mt-1">Every guide ends with mock questions and a 60-second revision checklist.</p>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-7">
-          {TOPICS.map((t) => {
-            const doneGuide = isArticleDone(progress, t.slug);
-            return (
-              <button key={t.slug} onClick={() => onNotes(t.slug)}
-                className="card-hover text-left bg-white rounded-2xl border border-brand-100 shadow-card p-5">
-                <div className="flex items-start justify-between">
-                  <span className="text-3xl">{t.emoji}</span>
-                  {doneGuide
-                    ? <span className="text-[0.65rem] font-extrabold bg-brand-600 text-white px-2 py-0.5 rounded-full">✓ DONE</span>
-                    : t.isNew && <span className="text-[0.65rem] font-extrabold bg-amber-400 text-amber-950 px-2 py-0.5 rounded-full">NEW</span>}
-                </div>
-                <h3 className="font-bold text-lg text-slate-900 mt-3 leading-snug">{t.title}</h3>
-                <p className="text-sm text-slate-600 mt-1.5 leading-relaxed">{t.blurb}</p>
-                <p className="text-xs font-bold text-brand-600 mt-3">
-                  {t.group} · {t.questions.length > 0 ? `🎤 ${t.questions.length} mock questions` : '📖 Guide'} →
-                </p>
-              </button>
-            );
-          })}
-        </div>
+        {groups.map((g) => (
+          <div key={g} className="mt-8">
+            <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-brand-500">{g}</h3>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+              {TOPICS.filter((t) => t.group === g).map((t) => {
+                const doneGuide = isArticleDone(progress, t.slug);
+                return (
+                  <button key={t.slug} onClick={() => onNotes(t.slug)}
+                    className="card-hover text-left bg-white rounded-2xl border border-brand-100 shadow-card p-5">
+                    <div className="flex items-start justify-between">
+                      <span className="text-3xl">{t.emoji}</span>
+                      {doneGuide
+                        ? <span className="text-[0.65rem] font-extrabold bg-brand-600 text-white px-2 py-0.5 rounded-full">✓ DONE</span>
+                        : t.isNew && <span className="text-[0.65rem] font-extrabold bg-amber-400 text-amber-950 px-2 py-0.5 rounded-full">NEW</span>}
+                    </div>
+                    <h3 className="font-bold text-lg text-slate-900 mt-3 leading-snug">{t.title}</h3>
+                    <p className="text-sm text-slate-600 mt-1.5 leading-relaxed">{t.blurb}</p>
+                    <p className="text-xs font-bold text-brand-600 mt-3">
+                      {t.group} · {t.questions.length > 0 ? `🎤 ${t.questions.length} mock questions` : '📖 Guide'} →
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </section>
 
       {/* Features strip */}
       <section className="bg-white border-y border-brand-100">
         <div className="max-w-7xl mx-auto px-4 py-12">
           <h2 className="text-2xl font-extrabold text-brand-900">Everything you need, one site ✨</h2>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-6">
             {[
-              ['📚', 'Notes that read like notes', `${TOPICS.length} highlighted guides with visuals & runnable code.`, () => onNotes('javascript')],
-              ['🧩', 'DSA Sheet', `${PROBLEMS.length} problems — explain, code, run tests, submit.`, onSheet],
-              ['🎤', 'Live mock interview', 'Ananya asks out loud, follows up, and grades you.', () => onMock()],
+              ['🧩', 'Problems', `${PROBLEMS.length} problems to browse by topic and difficulty.`, goProblems],
+              ['🗺️', 'Roadmap', 'A guided path from first guide to interview-ready.', goRoadmap],
+              ['📋', 'DSA Sheet', `${PROBLEMS.length} problems — explain, code, run tests, submit.`, onSheet],
+              ['🎯', 'Study Plans', `${PLANS.length} plans that tick themselves as you learn.`, onPlans],
               ['▶', 'Run Code', 'A JavaScript + SQL compiler in your browser. Ctrl+Enter and go.', onPlayground],
             ].map(([icon, title, body, go]) => (
-              <button key={title} onClick={go} className="card-hover text-left rounded-2xl bg-[#fbfdfc] border border-brand-100 p-5 shadow-card">
+              <button key={title} onClick={go} className="card-hover text-left rounded-2xl bg-white border border-brand-100 p-5 shadow-card">
                 <span className="text-3xl">{icon}</span>
                 <h3 className="font-bold text-brand-900 mt-3">{title}</h3>
                 <p className="text-sm text-slate-600 mt-1.5 leading-relaxed">{body}</p>
@@ -238,7 +249,7 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
               ['2️⃣ Say it + solve it', 'Explain each topic out loud, then prove it on the DSA Sheet — code it, run the tests, submit.'],
               ['3️⃣ Get interviewed', 'Attempt the mock questions, follow a study plan, then enter the mock room — the AI asks, follows up, and scores you.'],
             ].map(([h, b]) => (
-              <div key={h} className="rounded-2xl bg-[#fbfdfc] border border-brand-100 p-5 shadow-card">
+              <div key={h} className="rounded-2xl bg-white border border-brand-100 p-5 shadow-card">
                 <h3 className="font-bold text-brand-900">{h}</h3>
                 <p className="text-sm text-slate-600 mt-2 leading-relaxed">{b}</p>
               </div>

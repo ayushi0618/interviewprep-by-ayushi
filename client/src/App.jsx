@@ -10,13 +10,15 @@ import Playground from './pages/Playground';
 import DsaSheet from './pages/DsaSheet';
 import ProblemPage from './pages/ProblemPage';
 import StudyPlans from './pages/StudyPlans';
+import Problems from './pages/Problems';
+import Roadmap from './pages/Roadmap';
 import Auth from './pages/Auth';
 import Profile from './pages/Profile';
 
 // Simple state-based routing — enough for a notes site, and it keeps the
 // build a single static page the Express server can serve. The route is
 // remembered (ip_route) so a refresh keeps your place.
-//   home | notes | sheet | problem | plans | mock | playground | auth | profile
+//   home | notes | problems | roadmap | sheet | problem | plans | mock | playground | auth | profile
 export default function App() {
   const [route, setRoute] = useState(() => {
     const saved = localStorage.getItem('ip_route');
@@ -33,6 +35,8 @@ export default function App() {
   const goMock = (topic, mode) => setRoute({ name: 'mock', topic, mode });
   const goPlayground = () => setRoute({ name: 'playground' });
   const goSheet = () => setRoute({ name: 'sheet' });
+  const goProblems = () => setRoute({ name: 'problems' });
+  const goRoadmap = () => setRoute({ name: 'roadmap' });
   const goProblem = (problemId) => setRoute({ name: 'problem', problemId });
   const goPlans = () => setRoute({ name: 'plans' });
   const goAuth = () => setRoute({ name: 'auth' });
@@ -48,11 +52,14 @@ export default function App() {
             route={route}
             onHome={goHome}
             onNotes={(slug) => goNotes(slug)}
+            onProblems={goProblems}
+            onRoadmap={goRoadmap}
             onSheet={goSheet}
             onPlans={goPlans}
             onMock={() => goMock()}
             onPlayground={goPlayground}
             onPracticeTopic={(slug) => goMock(slug, 'practice')}
+            onProblem={goProblem}
             onAuth={goAuth}
             onProfile={goProfile}
           />
@@ -65,12 +72,16 @@ export default function App() {
                 onSheet={goSheet}
                 onPlans={goPlans}
                 onOpenProblem={goProblem}
+                onProblems={goProblems}
+                onRoadmap={goRoadmap}
               />
             )}
             {route.name === 'playground' && <Playground />}
             {route.name === 'notes' && (
-              <Notes slug={route.slug || 'javascript'} onSelect={(slug) => goNotes(slug)} onMock={(slug) => goMock(slug, 'practice')} />
+              <Notes slug={route.slug || 'javascript'} onSelect={(slug) => goNotes(slug)} onMock={(slug) => goMock(slug, 'practice')} onHome={goHome} />
             )}
+            {route.name === 'problems' && <Problems onProblem={goProblem} />}
+            {route.name === 'roadmap' && <Roadmap onSheet={goSheet} onProblem={goProblem} />}
             {route.name === 'sheet' && <DsaSheet onOpenProblem={goProblem} />}
             {route.name === 'problem' && (
               <ProblemPage
@@ -116,6 +127,8 @@ export default function App() {
             onPlans={goPlans}
             onMock={() => goMock()}
             onPlayground={goPlayground}
+            onProblems={goProblems}
+            onRoadmap={goRoadmap}
           />
         </div>
       </ProgressProvider>

@@ -204,6 +204,8 @@ const RAW_PLANS = [
           play('Practice query 8 — How many unique cities do active employees come from?', 'sql', '✍️ write it first'),
           play('Playground page: filter CSE students above 80', 'sql', '▶ playground'),
           task('Write queries 1–2 again from memory, no peeking', 'sql', '~10 min'),
+          play('Practice query 11 — Second-highest distinct salary', 'sql', '✍️ write it first'),
+          play('Practice query 13 — Names that appear more than once', 'sql', '✍️ write it first'),
         ],
       },
       {
@@ -219,6 +221,8 @@ const RAW_PLANS = [
           play('Practice query 10 — Delhi/Pune departments with an order above 10,000', 'sql', '✍️ write it first'),
           task('Sketch the employees / departments / orders schema from memory', 'sql', '~5 min'),
           task('Explain INNER vs LEFT JOIN out loud in 30 seconds', 'sql', 'say it'),
+          play('Practice query 12 — Employees earning more than their manager', 'sql', '✍️ write it first'),
+          play('Practice query 15 — Departments with active employees from both Delhi and Pune', 'sql', '✍️ write it first'),
         ],
       },
       {
@@ -235,6 +239,8 @@ const RAW_PLANS = [
           play('Playground page: average marks per course (GROUP BY)', 'sql', '▶ playground'),
           task('HAVING vs WHERE — write one example of each', 'sql', '~10 min'),
           prac('SQL practice round 1 (Q1–5)', 'sql', '🎤 say answers out loud'),
+          play('Practice query 14 — Monthly order totals with running total', 'sql', '✍️ write it first'),
+          play('Practice query 16 — Highest-paid employee in each department', 'sql', '✍️ write it first'),
         ],
       },
       {
@@ -251,6 +257,8 @@ const RAW_PLANS = [
           play('Playground page: run a query, break it on purpose, read the error', 'sql', '▶ playground'),
           prac('SQL practice round 2 (Q6–10)', 'sql', '🎤 say answers out loud'),
           task('Second-highest salary — write it two different ways', 'sql', 'classic question'),
+          play('Practice query 17 — Employees who placed orders on two consecutive days', 'sql', '✍️ write it first'),
+          play('Practice query 18 — Delete duplicate employee rows, keeping the lowest id', 'sql', '✍️ write it first'),
         ],
       },
       {
@@ -333,7 +341,7 @@ const RAW_PLANS = [
 
   {
     id: 'typescript-15',
-    title: 'TypeScript 15',
+    title: 'TypeScript 16',
     emoji: '🔷',
     tagline: 'Types, generics and narrowing — minus the runtime surprises.',
     color: 'brand',
@@ -549,7 +557,7 @@ const RAW_PLANS = [
 
   {
     id: 'cs-20',
-    title: 'CS Fundamentals 20',
+    title: 'CS Fundamentals 33',
     emoji: '🧰',
     tagline: 'Git, OS, networks, OOP and HTML/CSS — 30-second answers.',
     color: 'brand',
@@ -591,6 +599,24 @@ const RAW_PLANS = [
           sec('Specificity in one line', 'html-css', '~6 min'),
           sec('Responsive design basics', 'html-css', '~8 min'),
           prac('HTML/CSS practice round (Q1–5)', 'html-css', '🎤 say answers out loud'),
+        ],
+      },
+      {
+        id: 'core-subjects',
+        title: 'Core subjects — the full courses',
+        items: [
+          art('Read: Operating Systems course', 'operating-systems', '~35 min'),
+          sec('Processes & threads — what actually runs', 'operating-systems', '~12 min'),
+          sec('CPU scheduling — who gets the CPU next', 'operating-systems', '~10 min'),
+          art('Read: DBMS course', 'dbms', '~35 min'),
+          sec('SQL & normalization — 1NF to BCNF', 'dbms', '~10 min'),
+          sec('Transactions & ACID', 'dbms', '~10 min'),
+          art('Read: Computer Networks course', 'computer-networks', '~35 min'),
+          sec('DNS — how names become addresses', 'computer-networks', '~12 min'),
+          sec('TCP vs UDP — reliability vs speed', 'computer-networks', '~10 min'),
+          art('Read: OOP course', 'oop', '~30 min'),
+          sec('The four pillars', 'oop', '~10 min'),
+          sec('Design basics — composition over inheritance', 'oop', '~10 min'),
         ],
       },
     ],
@@ -711,6 +737,16 @@ const RAW_PLANS = [
           live('Live interview 2 — project + HR round', 'projects-hr', 'camera on 🎥'),
           task('Score yourself with the mock rubric, honestly', 'mock-bank', '~10 min'),
           task('Night-before checklist — run it the evening before', 'projects-hr', 'final pass'),
+        ],
+      },
+      {
+        id: 'core-rapid-fire',
+        title: 'Core subjects rapid fire',
+        items: [
+          prac('OS rapid round', 'operating-systems', '🎤 30 seconds each'),
+          prac('DBMS rapid round', 'dbms', '🎤 30 seconds each'),
+          prac('Networks rapid round', 'computer-networks', '🎤 30 seconds each'),
+          prac('OOP rapid round', 'oop', '🎤 30 seconds each'),
         ],
       },
     ],

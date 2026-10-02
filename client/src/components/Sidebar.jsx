@@ -38,17 +38,17 @@ export default function Sidebar({ active, onSelect }) {
                     onClick={() => onSelect(t.slug)}
                     className={`w-full text-left px-4 py-2.5 rounded-r-xl text-[0.92rem] font-medium flex items-center gap-2.5 transition border-l-4 ${
                       isActive
-                        ? 'bg-brand-600 text-white border-brand-800 shadow-card'
+                        ? 'bg-brand-600 text-white border-brand-700 shadow-card'
                         : 'text-slate-700 hover:bg-brand-50 border-transparent'
                     }`}
                   >
                     <span
                       className={`grid place-items-center w-5 h-5 rounded-full text-[0.65rem] font-extrabold shrink-0 ${
                         isDone
-                          ? 'bg-brand-600 text-white'
+                          ? 'bg-brand-600 text-white ring-2 ring-brand-100'
                           : isActive
                             ? 'bg-white/25 text-white'
-                            : 'bg-brand-100 text-brand-400'
+                            : 'bg-brand-100 text-brand-500'
                       }`}
                       title={isDone ? 'Completed' : 'Not completed yet'}
                     >

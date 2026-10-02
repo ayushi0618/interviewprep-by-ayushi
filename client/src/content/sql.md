@@ -226,9 +226,9 @@ Both return the identical names. The subquery reads like the English ("employees
 
 ---
 
-## ✍️ 10 Practice Queries
+## ✍️ 18 Practice Queries
 
-Schema for all 10 — say each answer aloud before opening the solution:
+Schema for all 18 — say each answer aloud before opening the solution:
 `employees(id, name, dept_id, salary, city, manager_id, is_active)` · `departments(id, dept_name, city)` · `orders(id, employee_id, amount, order_date)`
 
 **Q1. Active employees, highest salary first, top 3.**
@@ -337,6 +337,121 @@ SELECT name FROM employees WHERE manager_id = 4;
 SELECT DISTINCT d.dept_name FROM departments d
 JOIN employees e ON e.dept_id = d.id JOIN orders o ON o.employee_id = e.id
 WHERE d.city IN ('Delhi','Pune') AND o.amount > 10000;
+```
+
+</details>
+
+**Q11. Second-highest distinct salary across all employees.**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+SELECT MAX(salary) AS second_highest_salary
+FROM employees
+WHERE salary < (SELECT MAX(salary) FROM employees);
+```
+
+</details>
+
+**Q12. Employees earning more than their manager.**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+SELECT e.name AS employee, e.salary, m.name AS manager, m.salary AS manager_salary
+FROM employees e
+JOIN employees m ON e.manager_id = m.id
+WHERE e.salary > m.salary;
+```
+
+</details>
+
+**Q13. Employee names that appear more than once.**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+SELECT name, COUNT(*) AS copies
+FROM employees
+GROUP BY name
+HAVING COUNT(*) > 1
+ORDER BY copies DESC;
+```
+
+</details>
+
+**Q14. Monthly order totals with a running total.**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+SELECT DATE_FORMAT(order_date, '%Y-%m') AS month,
+       SUM(amount) AS month_total,
+       SUM(SUM(amount)) OVER (ORDER BY DATE_FORMAT(order_date, '%Y-%m')) AS running_total
+FROM orders
+GROUP BY DATE_FORMAT(order_date, '%Y-%m')
+ORDER BY month;
+```
+
+</details>
+
+**Q15. Departments with active employees from both Delhi and Pune.**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+SELECT d.dept_name
+FROM employees e
+JOIN departments d ON e.dept_id = d.id
+WHERE e.is_active = 1 AND e.city IN ('Delhi', 'Pune')
+GROUP BY d.dept_name
+HAVING COUNT(DISTINCT e.city) = 2;
+```
+
+</details>
+
+**Q16. Highest-paid employee in each department.**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+SELECT dept_name, name, salary
+FROM (
+  SELECT d.dept_name, e.name, e.salary,
+         ROW_NUMBER() OVER (PARTITION BY d.dept_name ORDER BY e.salary DESC) AS rn
+  FROM employees e
+  JOIN departments d ON e.dept_id = d.id
+) ranked
+WHERE rn = 1
+ORDER BY salary DESC;
+```
+
+</details>
+
+**Q17. Employees who placed orders on two consecutive days.**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+SELECT DISTINCT e.name
+FROM orders o1
+JOIN orders o2 ON o1.employee_id = o2.employee_id
+  AND DATEDIFF(o2.order_date, o1.order_date) = 1
+JOIN employees e ON e.id = o1.employee_id
+ORDER BY e.name;
+```
+
+</details>
+
+**Q18. Delete duplicate employee rows (same name and city), keeping the lowest id.**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+-- Run Q13 first to see which names would be affected.
+DELETE e2
+FROM employees e1
+JOIN employees e2 ON e1.name = e2.name AND e1.city = e2.city AND e1.id < e2.id;
 ```
 
 </details>

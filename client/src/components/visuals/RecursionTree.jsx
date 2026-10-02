@@ -89,7 +89,7 @@ export default function RecursionTree() {
           <div className="relative" style={{ width: TREE.slots * 54 + 68, height: 16 + 4 * 58 + 44 }}>
             <svg className="absolute inset-0 h-full w-full">
               {TREE.nodes.slice(0, step).map((nd) => (nd.parent === null ? null : (
-                <line key={nd.id} x1={X(TREE.nodes[nd.parent].x)} y1={Y(nd.depth - 1) + 30} x2={X(nd.x)} y2={Y(nd.depth)} stroke="#b6dec2" strokeWidth="2" />
+                <line key={nd.id} x1={X(TREE.nodes[nd.parent].x)} y1={Y(nd.depth - 1) + 30} x2={X(nd.x)} y2={Y(nd.depth)} stroke="#D9D1F2" strokeWidth="2" />
               )))}
             </svg>
             {TREE.nodes.map((nd, i) => {

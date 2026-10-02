@@ -23,6 +23,7 @@ const path = require('path');
 const fs = require('fs');
 const store = require('./server/store');
 const { createAuthRouter } = require('./server/auth');
+const interviewSessionsRouter = require('./server/interviewSessions');
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -30,6 +31,11 @@ app.use(express.json({ limit: '1mb' }));
 // Accounts + progress sync (auth.js); store.init() picks Mongo or JSON.
 const storeReady = store.init();
 app.use('/api', createAuthRouter({ store, storeReady }));
+
+// Session-based adaptive interview (server/interviewSessions.js):
+// POST /api/interview/start | /turn | /end — alongside the legacy
+// single-shot POST /api/interview below, which stays untouched.
+app.use(interviewSessionsRouter);
 
 const PORT = process.env.PORT || 3002;
 

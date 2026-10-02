@@ -4,17 +4,36 @@ import { speak, stopSpeaking, hasRecognition, createRecognizer } from '../lib/sp
 import { scoreInterviewAnswer, BAND_STYLES } from '../lib/scoring';
 
 const SESSION_KEY = 'ip_live_sessions';
-const ROUNDS = [
-  { key: 'intro', label: 'Intro' },
-  { key: 'project', label: 'Your Project' },
-  { key: 'technical', label: 'Technical' },
-  { key: 'dsa', label: 'DSA Approach' },
-  { key: 'closing', label: 'Your Questions' },
-];
+const MAX_EXCHANGES = 12;
 
-// --- Mirror of the scripted engine in server.js -----------------------------
-// Used only if the /api/interview call itself fails (e.g. opening the built
-// site without the Express server), so the room always works, key or not.
+const FOCUS_OPTIONS = ['Mixed', 'DSA', 'JavaScript', 'React', 'Backend', 'Core Subjects', 'HR'];
+const DIFFICULTY_OPTIONS = ['Easy', 'Medium', 'Hard'];
+
+// Focus (new session API) <-> topic slug (bank / notes / saved sessions).
+const FOCUS_TO_SLUG = {
+  Mixed: 'javascript',
+  DSA: 'dsa',
+  JavaScript: 'javascript',
+  React: 'react',
+  Backend: 'backend',
+  'Core Subjects': 'git-cs',
+  HR: 'projects-hr',
+};
+const SLUG_TO_FOCUS = {
+  dsa: 'DSA',
+  javascript: 'JavaScript',
+  react: 'React',
+  backend: 'Backend',
+  'git-cs': 'Core Subjects',
+  'projects-hr': 'HR',
+};
+
+// --- Offline scripted ladder (fallback ONLY) ---------------------------------
+// This is the old deterministic engine, kept verbatim in spirit. Its ONLY role
+// now is to keep the room alive when the session API itself is unreachable
+// (e.g. opening the built site with no Express server, or the network drops
+// mid-interview). The real interviewer is session-based on the server:
+// POST /api/interview/start -> /turn -> /end (see server/interviewSessions.js).
 const TECH_TERMS = [
   'authentication', 'typescript', 'javascript', 'websocket', 'websockets',
   'mongodb', 'mongo', 'tailwind', 'deployment', 'database', 'express',
@@ -249,18 +268,80 @@ function localNext(payload) {
   return { type: 'closing', round: 'done', done: true, text: 'Thank you — your scorecard is ready.', scoreRef: null, aiUsed: false, nextState: blank('done') };
 }
 
-async function askBrain(payload) {
-  try {
-    const res = await fetch('/api/interview', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error('bad status');
-    return await res.json();
-  } catch {
-    return localNext(payload);
+// Grade a local (offline-ladder) transcript into scored rows — the old
+// report engine, now used only to build a report when /api/interview/end
+// itself is unreachable.
+function grade(transcript, topicSlug) {
+  const rows = [];
+  transcript.forEach((e, i) => {
+    if (e.from === 'interviewer' && e.round === 'intro') {
+      const ans = transcript.slice(i + 1).find((x) => x.from === 'candidate');
+      if (ans) rows.push({ kind: 'warmup', question: 'Tell me about yourself', transcript: ans.skipped ? '' : ans.text, words: ans.skipped ? 0 : (ans.text.trim() ? ans.text.trim().split(/\s+/).length : 0), skipped: !!ans.skipped });
+    }
+    if (e.from === 'interviewer' && e.scoreRef) {
+      const block = [];
+      let hintUsed = false;
+      for (let j = i + 1; j < transcript.length; j += 1) {
+        const x = transcript[j];
+        if (x.from === 'interviewer' && (x.scoreRef || x.round === 'closing' || x.round === 'done')) break;
+        if (x.from === 'interviewer' && x.kind === 'hint') hintUsed = true;
+        if (x.from === 'candidate') block.push(x);
+      }
+      const answered = block.filter((c) => !c.skipped);
+      const scoreText = answered.map((c) => c.text).join(' ');
+      rows.push({
+        kind: 'scored',
+        round: e.round,
+        revTopic: e.round === 'dsa' ? 'dsa' : e.round === 'project' ? 'projects-hr' : topicSlug,
+        question: e.scoreRef.question,
+        modelAnswer: e.scoreRef.answer,
+        transcript: scoreText,
+        ...scoreInterviewAnswer(scoreText, e.scoreRef, { skipped: block.length > 0 && answered.length === 0, hintUsed }),
+      });
+    }
+  });
+  return rows;
+}
+
+function bandForScore(pct) {
+  return pct >= 65 ? 'Strong' : pct >= 38 ? 'Good' : 'Needs work';
+}
+
+// Shape a locally-graded transcript into the same report shape the server
+// returns ({ overallBand, overallScore, summary, perQuestion, strengths,
+// gaps }), so the report screen renders one way regardless of source.
+function buildLocalReport(transcript, focusLabel) {
+  const rows = grade(transcript, FOCUS_TO_SLUG[focusLabel] || 'javascript');
+  const scored = rows.filter((r) => r.kind === 'scored');
+  const overallScore = scored.length ? Math.round(scored.reduce((s, r) => s + r.score, 0) / scored.length) : 0;
+  const perQuestion = scored.map((r) => ({
+    question: r.question,
+    score: Math.round(r.score / 10),
+    feedback: r.skipped
+      ? 'You skipped this one.'
+      : r.band === 'Strong'
+        ? `Strong answer${r.hitKeywords?.length ? ` — you covered ${r.hitKeywords.slice(0, 3).join(', ')}` : ''}.`
+        : r.band === 'Good'
+          ? `Workable answer${r.missedKeywords?.length ? ` — add ${r.missedKeywords.slice(0, 2).join(' and ')} next time` : ''}.`
+          : `Needs work${r.missedKeywords?.length ? ` — revise ${r.missedKeywords.slice(0, 2).join(' and ')}` : ''}.`,
+    transcript: r.transcript,
+    _modelAnswer: r.modelAnswer,
+  }));
+  const weakest = [...perQuestion].sort((a, b) => a.score - b.score).slice(0, Math.min(3, perQuestion.length));
+  for (const q of perQuestion) {
+    if (weakest.includes(q)) q.modelAnswer = q._modelAnswer;
+    delete q._modelAnswer;
   }
+  return {
+    overallBand: bandForScore(overallScore),
+    overallScore,
+    summary: scored.length
+      ? `Offline review of your ${focusLabel} session across ${scored.length} scored question${scored.length === 1 ? '' : 's'}. Run it with the AI interviewer for feedback tied to your exact words.`
+      : 'No scored questions were completed — try again and answer each one out loud, even briefly.',
+    perQuestion,
+    strengths: scored.filter((r) => r.band === 'Strong').map((r) => `Strong answer on: ${r.question}`).slice(0, 6),
+    gaps: scored.filter((r) => r.band !== 'Strong').map((r) => `Revise: ${r.question}`).slice(0, 6),
+  };
 }
 
 function loadSessions() {
@@ -269,9 +350,37 @@ function loadSessions() {
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
+// --- Session API (the real interviewer) --------------------------------------
+async function apiStart(body) {
+  const res = await fetch('/api/interview/start', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `start failed (${res.status})`);
+  return data;
+}
+async function apiTurn(body) {
+  const res = await fetch('/api/interview/turn', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `turn failed (${res.status})`);
+  return data;
+}
+async function apiEnd(body) {
+  const res = await fetch('/api/interview/end', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || `end failed (${res.status})`);
+  return data;
+}
+
 export default function LiveInterview({ initialTopic, onReadTopic }) {
   const [phase, setPhase] = useState('setup'); // setup | live | done
-  const [topicSel, setTopicSel] = useState(initialTopic || 'javascript');
+  const [candidateName, setCandidateName] = useState('');
+  const [focus, setFocus] = useState(SLUG_TO_FOCUS[initialTopic] || 'Mixed');
+  const [difficulty, setDifficulty] = useState('Medium');
   const [useCamera, setUseCamera] = useState(true);
   const [useMic, setUseMic] = useState(true);
   const [voiceOn, setVoiceOn] = useState(true);
@@ -283,11 +392,17 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
   const [thinking, setThinking] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [qElapsed, setQElapsed] = useState(0);
-  const [round, setRound] = useState('intro');
   const [aiUsed, setAiUsed] = useState(false);
-  const [pastSessions] = useState(loadSessions);
+  const [offlineMode, setOfflineMode] = useState(false);
+  const [exchange, setExchange] = useState(0);
+  const [report, setReport] = useState(null);
+  const [pastSessions, setPastSessions] = useState(loadSessions);
 
-  const stateRef = useRef({ round: 'start', techIdx: 0, techPicked: [], followUpUsed: false, hintUsed: false, dsaIdx: 0, projectProbed: false });
+  const sessionIdRef = useRef(null);
+  const offlineRef = useRef(false);
+  const localStateRef = useRef({ round: 'start', techIdx: 0, techPicked: [], followUpUsed: false, hintUsed: false, dsaIdx: 0, projectProbed: false });
+  const entriesRef = useRef([]);
+  const finishingRef = useRef(false);
   const streamRef = useRef(null);
   const recRef = useRef(null);
   const videoRef = useRef(null);
@@ -296,11 +411,12 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
   const qStartRef = useRef(null);
 
   const sttAvailable = useMemo(() => hasRecognition(), []);
-  const topic = TOPICS.find((t) => t.slug === topicSel);
+  const localSlug = FOCUS_TO_SLUG[focus] || 'javascript';
+  const localTopicTitle = TOPICS.find((t) => t.slug === localSlug)?.title || focus;
   const answerWords = useMemo(() => (answer.trim() ? answer.trim().split(/\s+/).length : 0), [answer]);
-  const roundIdx = Math.max(0, ROUNDS.findIndex((r) => r.key === round));
+  const badge = offlineMode || !aiUsed ? '🎚️ Offline scripted mode' : '🤖 AI interviewer';
 
-  useEffect(() => { if (initialTopic) setTopicSel(initialTopic); }, [initialTopic]);
+  useEffect(() => { if (initialTopic && SLUG_TO_FOCUS[initialTopic]) setFocus(SLUG_TO_FOCUS[initialTopic]); }, [initialTopic]);
 
   // Total + per-question timers while live
   useEffect(() => {
@@ -321,24 +437,110 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
     if (videoRef.current && streamRef.current) videoRef.current.srcObject = streamRef.current;
   };
 
-  function applyResponse(res, baseEntries) {
-    stateRef.current = res.nextState;
-    if (res.aiUsed) setAiUsed(true);
-    setRound(res.round || res.nextState?.round || 'intro');
+  function setEntriesBoth(next) {
+    entriesRef.current = next;
+    setEntries(next);
+  }
+
+  // --- Local ladder plumbing (fallback path only) ---------------------------
+  function initLocalMidState() {
+    const items = topicItems(localSlug);
+    localStateRef.current = {
+      round: 'technical', techIdx: 0, techPicked: pickTechPicked(items),
+      followUpUsed: false, hintUsed: false, dsaIdx: pickDsaIdx(topicItems('dsa')), projectProbed: true,
+    };
+  }
+
+  function applyLocalResponse(res, baseEntries) {
+    localStateRef.current = res.nextState;
     const additions = [];
     if (res.feedback) additions.push({ from: 'feedback', text: res.feedback });
     additions.push({ from: 'interviewer', text: res.text, scoreRef: res.scoreRef || null, kind: res.type, round: res.round });
     const all = [...baseEntries, ...additions];
-    setEntries(all);
-    if (res.type === 'question') { qStartRef.current = Date.now(); setQElapsed(0); }
+    setEntriesBoth(all);
+    qStartRef.current = Date.now(); setQElapsed(0);
     if (voiceOn && res.text) speak(res.text);
-    if (res.done) finish(all);
+    if (res.done) finishInterview(all, { localOnly: true });
   }
 
+  function localTurn(baseEntries, { text, skipped }) {
+    const res = localNext({
+      topic: localSlug,
+      ...localStateRef.current,
+      lastAnswer: skipped ? '' : text,
+      skipped,
+      history: baseEntries.map((e) => ({ from: e.from, text: e.text, skipped: !!e.skipped })),
+    });
+    applyLocalResponse(res, baseEntries);
+  }
+
+  function switchToOffline(baseEntries, { text, skipped }) {
+    offlineRef.current = true;
+    setOfflineMode(true);
+    setAiUsed(false);
+    initLocalMidState();
+    localTurn(baseEntries, { text, skipped });
+  }
+
+  // --- Report / session-meta persistence ------------------------------------
+  // Preserved from the previous room: every finished session writes
+  // { date, topic (slug), focus, score, band, rows } to localStorage
+  // 'ip_live_sessions' (capped at 10). That list is what powers
+  // Past sessions here, Profile's "Live interviews taken / Best" card,
+  // and progress.jsx readLiveMeta() (taken / best band+score / last date)
+  // for account sync — the shape must not change.
+  function saveSessionMeta(rep) {
+    const session = {
+      date: new Date().toISOString(),
+      topic: localSlug,
+      focus,
+      score: rep.overallScore,
+      band: rep.overallBand,
+      rows: (rep.perQuestion || []).map((q) => ({ question: q.question, band: bandForScore((q.score || 0) * 10) })),
+    };
+    try {
+      const next = [session, ...loadSessions()].slice(0, 10);
+      localStorage.setItem(SESSION_KEY, JSON.stringify(next));
+      setPastSessions(next);
+    } catch { /* storage full/blocked — results still show on screen */ }
+  }
+
+  async function finishInterview(transcript, { localOnly = false } = {}) {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+    stopSpeaking();
+    setThinking(true);
+    let rep = null;
+    let usedAi = aiUsed;
+    if (!localOnly && !offlineRef.current && sessionIdRef.current) {
+      try {
+        const data = await apiEnd({ sessionId: sessionIdRef.current });
+        rep = data.report;
+        usedAi = !!data.aiUsed || usedAi;
+      } catch {
+        rep = null; // fall through to the local report below
+      }
+    }
+    if (!rep) {
+      rep = buildLocalReport(transcript, focus);
+      usedAi = false;
+    }
+    setReport(rep);
+    setAiUsed(usedAi);
+    saveSessionMeta(rep);
+    setThinking(false);
+    setPhase('done');
+  }
+
+  // --- Room flow -------------------------------------------------------------
   async function start() {
     stopSpeaking();
-    setEntries([]); setAnswer(''); setElapsed(0); setQElapsed(0); setAiUsed(false);
-    stateRef.current = { round: 'start', techIdx: 0, techPicked: [], followUpUsed: false, hintUsed: false, dsaIdx: 0, projectProbed: false };
+    finishingRef.current = false;
+    setEntriesBoth([]); setAnswer(''); setElapsed(0); setQElapsed(0);
+    setAiUsed(false); setOfflineMode(false); setExchange(0); setReport(null);
+    sessionIdRef.current = null;
+    offlineRef.current = false;
+    localStateRef.current = { round: 'start', techIdx: 0, techPicked: [], followUpUsed: false, hintUsed: false, dsaIdx: 0, projectProbed: false };
     let mode = 'text';
     if (useCamera || useMic) {
       try {
@@ -355,9 +557,24 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
     qStartRef.current = Date.now();
     setPhase('live');
     setThinking(true);
-    const res = await askBrain({ topic: topicSel, ...stateRef.current, lastAnswer: '', history: [] });
+    try {
+      const data = await apiStart({ name: candidateName.trim(), focus, difficulty });
+      sessionIdRef.current = data.sessionId;
+      setAiUsed(!!data.aiUsed);
+      setExchange(data.exchange || 0);
+      const first = [{ from: 'interviewer', text: data.text, kind: 'question' }];
+      setEntriesBoth(first);
+      if (voiceOn && data.text) speak(data.text);
+    } catch {
+      // Session API unreachable — run the local scripted ladder instead of
+      // dead-ending (the ladder's only remaining job).
+      offlineRef.current = true;
+      setOfflineMode(true);
+      setAiUsed(false);
+      const res = localNext({ topic: localSlug, ...localStateRef.current, lastAnswer: '', history: [] });
+      applyLocalResponse(res, []);
+    }
     setThinking(false);
-    applyResponse(res, []);
     setTimeout(attachStream, 60);
   }
 
@@ -376,84 +593,111 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
   }
 
   async function submitAnswer({ skipped = false } = {}) {
-    const text = skipped ? '' : answer.trim();
-    if (thinking || (!skipped && !text)) return;
+    const text = skipped ? "I don't know — let's skip this one." : answer.trim();
+    if (thinking || finishingRef.current || (!skipped && !text)) return;
     if (listening) toggleListening();
     stopSpeaking();
     const candidateEntry = { from: 'candidate', text: skipped ? '⏭ Skipped this one' : text, skipped };
-    const newEntries = [...entries, candidateEntry];
-    setEntries(newEntries);
+    const newEntries = [...entriesRef.current, candidateEntry];
+    setEntriesBoth(newEntries);
     setAnswer('');
     setThinking(true);
-    const res = await askBrain({
-      topic: topicSel,
-      ...stateRef.current,
-      lastAnswer: text,
-      skipped,
-      history: newEntries.map((e) => ({ from: e.from, text: e.text, skipped: !!e.skipped })),
-    });
+
+    if (!offlineRef.current && sessionIdRef.current) {
+      try {
+        const data = await apiTurn({ sessionId: sessionIdRef.current, answer: text });
+        if (data.aiUsed) setAiUsed(true);
+        setExchange(data.exchange ?? exchange + 1);
+        const additions = [];
+        if (data.feedback) additions.push({ from: 'feedback', text: data.feedback });
+        additions.push({ from: 'interviewer', text: data.text, kind: data.done ? 'closing' : 'question' });
+        const all = [...newEntries, ...additions];
+        setEntriesBoth(all);
+        qStartRef.current = Date.now(); setQElapsed(0);
+        if (voiceOn && data.text) speak(data.text);
+        setThinking(false);
+        if (data.done) finishInterview(all);
+        return;
+      } catch {
+        // Server dropped mid-interview — continue on the local ladder with
+        // the candidate's answer already on the transcript.
+        setThinking(false);
+        switchToOffline(newEntries, { text, skipped });
+        return;
+      }
+    }
+    localTurn(newEntries, { text, skipped });
     setThinking(false);
-    applyResponse(res, newEntries);
   }
 
-  // Build the report: intro is an unscored warm-up (word count only); every
-  // scored question is graded on all the candidate's words for that question
-  // (main answer + follow-up/hint retries), so extra depth counts.
-  function grade(transcript) {
-    const rows = [];
-    transcript.forEach((e, i) => {
-      if (e.from === 'interviewer' && e.round === 'intro') {
-        const ans = transcript.slice(i + 1).find((x) => x.from === 'candidate');
-        if (ans) rows.push({ kind: 'warmup', question: 'Tell me about yourself', transcript: ans.skipped ? '' : ans.text, words: ans.skipped ? 0 : (ans.text.trim() ? ans.text.trim().split(/\s+/).length : 0), skipped: !!ans.skipped });
-      }
-      if (e.from === 'interviewer' && e.scoreRef) {
-        const block = [];
-        let hintUsed = false;
-        for (let j = i + 1; j < transcript.length; j += 1) {
-          const x = transcript[j];
-          if (x.from === 'interviewer' && (x.scoreRef || x.round === 'closing' || x.round === 'done')) break;
-          if (x.from === 'interviewer' && x.kind === 'hint') hintUsed = true;
-          if (x.from === 'candidate') block.push(x);
-        }
-        const answered = block.filter((c) => !c.skipped);
-        const scoreText = answered.map((c) => c.text).join(' ');
-        rows.push({
-          kind: 'scored',
-          round: e.round,
-          revTopic: e.round === 'dsa' ? 'dsa' : e.round === 'project' ? 'projects-hr' : topicSel,
-          question: e.scoreRef.question,
-          modelAnswer: e.scoreRef.answer,
-          transcript: scoreText,
-          ...scoreInterviewAnswer(scoreText, e.scoreRef, { skipped: block.length > 0 && answered.length === 0, hintUsed }),
-        });
-      }
-    });
-    return rows;
-  }
-
-  function finish(transcript) {
+  async function requestHint() {
+    if (thinking || finishingRef.current || phase !== 'live') return;
     stopSpeaking();
-    const rows = grade(transcript);
-    const scored = rows.filter((r) => r.kind === 'scored');
-    const avg = scored.length ? Math.round(scored.reduce((s, r) => s + r.score, 0) / scored.length) : 0;
-    const band = avg >= 65 ? 'Strong' : avg >= 38 ? 'Good' : 'Needs work';
-    const session = {
-      date: new Date().toISOString(), topic: topicSel, score: avg, band,
-      rows: scored.map((r) => ({ question: r.question, band: r.band })),
-    };
-    try {
-      localStorage.setItem(SESSION_KEY, JSON.stringify([session, ...loadSessions()].slice(0, 10)));
-    } catch { /* storage full/blocked — results still show on screen */ }
-    setPhase('done');
+    setThinking(true);
+    if (!offlineRef.current && sessionIdRef.current) {
+      try {
+        const data = await apiTurn({ sessionId: sessionIdRef.current, answer: '', wantHint: true });
+        if (data.aiUsed) setAiUsed(true);
+        const additions = [];
+        if (data.feedback) additions.push({ from: 'feedback', text: data.feedback });
+        additions.push({ from: 'interviewer', text: data.text, kind: 'hint' });
+        const all = [...entriesRef.current, ...additions];
+        setEntriesBoth(all);
+        if (voiceOn && data.text) speak(data.text);
+        setThinking(false);
+        return;
+      } catch {
+        setThinking(false);
+        switchOfflineHint();
+        return;
+      }
+    }
+    switchOfflineHint();
+    setThinking(false);
   }
 
-  const endEarly = () => finish(entries);
-  const rows = phase === 'done' ? grade(entries) : [];
-  const scoredRows = rows.filter((r) => r.kind === 'scored');
-  const scorePct = scoredRows.length ? Math.round(scoredRows.reduce((s, r) => s + r.score, 0) / scoredRows.length) : 0;
-  const overallBand = scorePct >= 65 ? 'Strong' : scorePct >= 38 ? 'Good' : 'Needs work';
+  function switchOfflineHint() {
+    offlineRef.current = true;
+    setOfflineMode(true);
+    // If we dropped offline before any local question was asked, park the
+    // ladder in the technical round so the next answer continues sensibly.
+    if (localStateRef.current.round === 'start') initLocalMidState();
+    const current = [...entriesRef.current].reverse().find((e) => e.from === 'interviewer' && e.scoreRef);
+    const kw = current?.scoreRef?.keywords?.[0] || 'the core idea';
+    const all = [...entriesRef.current, { from: 'interviewer', text: `Hint: think about how ${kw} fits in — then take another go at it.`, kind: 'hint' }];
+    setEntriesBoth(all);
+  }
+
+  const endEarly = () => finishInterview(entriesRef.current);
+
+  const newInterview = () => {
+    finishingRef.current = false;
+    sessionIdRef.current = null;
+    offlineRef.current = false;
+    setReport(null);
+    setEntriesBoth([]);
+    setPhase('setup');
+  };
+
   const mmss = fmt(elapsed);
   const qMmss = fmt(qElapsed);
+
+  // "You said" per reported question, zipped by order (follow-ups merge into
+  // the current question's block, like the old grader did).
+  const candidateBlocks = useMemo(() => {
+    if (phase !== 'done') return [];
+    const blocks = [];
+    let current = null;
+    for (const e of entries) {
+      if (e.from === 'interviewer' && e.kind !== 'feedback' && e.kind !== 'hint') {
+        current = [];
+        blocks.push(current);
+      } else if (e.from === 'candidate' && current) {
+        if (!e.skipped) current.push(e.text);
+      }
+    }
+    return blocks.map((b) => b.join(' '));
+  }, [entries, phase]);
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
@@ -462,8 +706,9 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
           <h2 className="text-2xl font-extrabold text-brand-900">🎥 Live AI Interview room</h2>
           <p className="text-slate-600 mt-2 leading-relaxed">
             Meet <strong>👩‍💻 Ananya, Senior Software Engineer</strong> — your interviewer. She <strong>speaks each
-            question aloud</strong>, you answer by voice or typing, she probes your answers like a real interviewer,
-            and you get a scored report at the end. Works fully with no API key.
+            question aloud</strong>, listens to your actual answers, follows up on your own words, adapts the
+            difficulty as you go, and gives you a scored report at the end (up to {MAX_EXCHANGES} answers).
+            With no AI key configured she runs in offline scripted mode instead — the badge in the room tells you which.
           </p>
           <div className="callout note mt-5">
             <div className="callout-title">🔒 Your privacy</div>
@@ -472,24 +717,43 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
               and interview sessions save only a text summary on this device.</p>
           </div>
 
-          <label className="block mt-6 text-sm font-bold text-slate-700">Interview topic (technical round)</label>
-          <select value={topicSel} onChange={(e) => setTopicSel(e.target.value)}
-            className="mt-2 w-full rounded-xl border border-brand-200 px-4 py-3 font-medium outline-none focus:ring-2 focus:ring-brand-400">
-            {TOPICS.filter((t) => t.questions.length >= 5).map((t) => (
-              <option key={t.slug} value={t.slug}>{t.emoji} {t.title} ({t.questions.length} questions)</option>
-            ))}
-          </select>
+          <label className="block mt-6 text-sm font-bold text-slate-700">Your name</label>
+          <input value={candidateName} onChange={(e) => setCandidateName(e.target.value)}
+            placeholder="e.g. Ayushi"
+            className="mt-2 w-full rounded-xl border border-brand-200 px-4 py-3 font-medium outline-none focus:ring-2 focus:ring-brand-400" />
+
+          <div className="grid md:grid-cols-2 gap-4 mt-5">
+            <div>
+              <label className="block text-sm font-bold text-slate-700">Interview focus</label>
+              <select value={focus} onChange={(e) => setFocus(e.target.value)}
+                className="mt-2 w-full rounded-xl border border-brand-200 px-4 py-3 font-medium outline-none focus:ring-2 focus:ring-brand-400">
+                {FOCUS_OPTIONS.map((f) => (
+                  <option key={f} value={f}>{f}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-slate-700">Starting difficulty</label>
+              <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}
+                className="mt-2 w-full rounded-xl border border-brand-200 px-4 py-3 font-medium outline-none focus:ring-2 focus:ring-brand-400">
+                {DIFFICULTY_OPTIONS.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-400 mt-1.5">Ananya adapts up or down from here based on your answers.</p>
+            </div>
+          </div>
 
           <div className="grid sm:grid-cols-3 gap-3 mt-5">
-            <label className="flex items-center gap-2.5 bg-[#fbfdfc] border border-brand-100 rounded-xl px-4 py-3 cursor-pointer">
+            <label className="flex items-center gap-2.5 bg-brand-50 border border-brand-100 rounded-xl px-4 py-3 cursor-pointer">
               <input type="checkbox" checked={useCamera} onChange={(e) => setUseCamera(e.target.checked)} className="w-4 h-4 accent-brand-600" />
               <span className="text-sm font-semibold">📷 Camera preview</span>
             </label>
-            <label className="flex items-center gap-2.5 bg-[#fbfdfc] border border-brand-100 rounded-xl px-4 py-3 cursor-pointer">
+            <label className="flex items-center gap-2.5 bg-brand-50 border border-brand-100 rounded-xl px-4 py-3 cursor-pointer">
               <input type="checkbox" checked={useMic} onChange={(e) => setUseMic(e.target.checked)} className="w-4 h-4 accent-brand-600" />
               <span className="text-sm font-semibold">🎙️ Microphone</span>
             </label>
-            <label className="flex items-center gap-2.5 bg-[#fbfdfc] border border-brand-100 rounded-xl px-4 py-3 cursor-pointer">
+            <label className="flex items-center gap-2.5 bg-brand-50 border border-brand-100 rounded-xl px-4 py-3 cursor-pointer">
               <input type="checkbox" checked={voiceOn} onChange={(e) => setVoiceOn(e.target.checked)} className="w-4 h-4 accent-brand-600" />
               <span className="text-sm font-semibold">🔊 Interviewer voice</span>
             </label>
@@ -503,10 +767,10 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
           {mediaNote && <p className="text-sm text-slate-600 mt-3">{mediaNote}</p>}
 
           <button onClick={start} className="mt-6 w-full bg-brand-600 hover:bg-brand-500 text-white font-bold py-3.5 rounded-xl shadow-card transition">
-            Start interview — {topic?.title}
+            Start interview — {focus} · {difficulty}
           </button>
           <p className="text-xs text-slate-400 mt-3 text-center">
-            Flow: intro → your project → 4 technical questions → 1 DSA approach → your questions → scored report.
+            A real conversation, not a fixed script: follow-ups build on your words, and you can ask for a hint anytime.
           </p>
 
           {pastSessions.length > 0 && (
@@ -514,8 +778,8 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
               <h3 className="font-bold text-slate-800">Past live sessions</h3>
               <ul className="mt-2 space-y-1.5 text-sm">
                 {pastSessions.slice(0, 4).map((s, i) => (
-                  <li key={i} className="flex justify-between items-center bg-[#fbfdfc] border border-brand-100 rounded-lg px-3 py-2">
-                    <span>{TOPICS.find((t) => t.slug === s.topic)?.title || s.topic} · {new Date(s.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                  <li key={i} className="flex justify-between items-center bg-brand-50 border border-brand-100 rounded-lg px-3 py-2">
+                    <span>{TOPICS.find((t) => t.slug === s.topic)?.title || s.focus || s.topic} · {new Date(s.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
                     <span className="flex items-center gap-2">
                       {s.band && <span className={`px-2 py-0.5 rounded-md border text-xs font-extrabold ${BAND_STYLES[s.band] || ''}`}>{s.band}</span>}
                       <strong className="text-brand-700">{s.score}%</strong>
@@ -541,7 +805,7 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
             )}
             <div className="flex items-center justify-between px-4 py-3 text-white">
               <span className="font-mono font-bold">⏱ {mmss}</span>
-              <span className="text-xs bg-white/15 px-2 py-1 rounded-md font-semibold">{aiUsed ? '🤖 Gemini' : '🎚️ Scripted'}</span>
+              <span className="text-xs bg-white/15 px-2 py-1 rounded-md font-semibold">{badge}</span>
             </div>
             {mediaMode === 'av' && <p className="px-4 pb-3 text-[0.7rem] text-slate-400 -mt-1">Preview only — nothing is recorded or uploaded.</p>}
           </div>
@@ -551,21 +815,14 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
             <div className="px-5 py-3 border-b border-brand-100">
               <div className="flex items-center justify-between gap-2">
                 <p className="font-extrabold text-brand-900">👩‍💻 Ananya · Senior Software Engineer</p>
-                <span className="text-xs bg-brand-50 border border-brand-100 px-2 py-1 rounded-md font-semibold text-brand-700">{aiUsed ? '🤖 Gemini' : '🎚️ Scripted'} · {topic?.title}</span>
+                <span className="text-xs bg-brand-50 border border-brand-100 px-2 py-1 rounded-md font-semibold text-brand-700">{badge} · {focus} · {difficulty}</span>
               </div>
               <div className="flex items-center justify-between gap-2 mt-2">
-                <p className="text-xs font-bold text-slate-500">Round {roundIdx + 1} of 5 · {ROUNDS[roundIdx]?.label}</p>
-                <button onClick={endEarly} className="text-sm font-bold text-red-600 hover:text-red-500">End interview</button>
+                <p className="text-xs font-bold text-slate-500">Exchange {Math.min(exchange + 1, MAX_EXCHANGES)} of {MAX_EXCHANGES} · {exchange} answered</p>
+                <button onClick={endEarly} disabled={thinking} className="text-sm font-bold text-red-600 hover:text-red-500 disabled:opacity-50">End interview</button>
               </div>
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {ROUNDS.map((r, i) => (
-                  <span key={r.key} className={`px-2 py-0.5 rounded-full border text-[0.7rem] font-bold ${
-                    i < roundIdx ? 'bg-brand-600 text-white border-brand-600'
-                    : i === roundIdx ? 'bg-brand-50 text-brand-800 border-brand-400'
-                    : 'bg-white text-slate-400 border-slate-200'}`}>
-                    {i < roundIdx ? '✓ ' : ''}{r.label}
-                  </span>
-                ))}
+              <div className="h-1.5 bg-brand-50 rounded-full mt-2 overflow-hidden">
+                <div className="h-full bg-brand-500 transition-all" style={{ width: `${(exchange / MAX_EXCHANGES) * 100}%` }} />
               </div>
             </div>
 
@@ -575,9 +832,10 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
                   <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-[0.95rem] leading-relaxed shadow-sm ${
                     e.from === 'candidate' ? 'bg-brand-600 text-white rounded-br-md'
                     : e.from === 'feedback' ? 'bg-amber-50 border border-amber-200 text-amber-900 rounded-bl-md'
-                    : 'bg-[#f2f7f4] border border-brand-100 text-slate-800 rounded-bl-md'}`}>
+                    : e.kind === 'hint' ? 'bg-amber-50 border border-amber-300 text-amber-900 rounded-bl-md'
+                    : 'bg-brand-50 border border-brand-100 text-slate-800 rounded-bl-md'}`}>
                     <p className={`text-[0.65rem] font-extrabold tracking-widest mb-1 ${e.from === 'candidate' ? 'text-brand-100' : 'text-brand-500'}`}>
-                      {e.from === 'candidate' ? 'YOU' : e.from === 'feedback' ? '👩‍💻 ANANYA · FEEDBACK' : '👩‍💻 ANANYA'}
+                      {e.from === 'candidate' ? 'YOU' : e.from === 'feedback' ? '👩‍💻 ANANYA · FEEDBACK' : e.kind === 'hint' ? '👩‍💻 ANANYA · HINT 💡' : '👩‍💻 ANANYA'}
                     </p>
                     {e.text}
                   </div>
@@ -587,7 +845,7 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
               <div ref={bottomRef} />
             </div>
 
-            <div className="border-t border-brand-100 p-4 bg-[#fbfdfc]">
+            <div className="border-t border-brand-100 p-4 bg-brand-50/50">
               <p className="text-xs font-semibold text-slate-400 mb-2">⏱ {qMmss} on this question</p>
               <textarea value={answer} onChange={(e) => setAnswer(e.target.value)} rows={3}
                 placeholder={sttAvailable ? 'Speak with the mic button, or type your answer here…' : 'Type your answer here…'}
@@ -595,7 +853,7 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
               {answerWords > 0 && answerWords < 10 && (
                 <p className="text-xs text-amber-700 mt-1.5">Short answers score low in real interviews — add the <em>why</em>.</p>
               )}
-              <div className="flex gap-2 mt-3">
+              <div className="flex flex-wrap gap-2 mt-3">
                 {sttAvailable && (
                   <button onClick={toggleListening}
                     className={`px-4 py-2.5 rounded-xl font-bold text-sm shadow-card transition ${listening ? 'bg-red-500 text-white animate-pulse' : 'bg-white border border-brand-200 text-brand-800'}`}>
@@ -605,6 +863,10 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
                 <button onClick={() => submitAnswer()} disabled={!answer.trim() || thinking}
                   className="flex-1 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl shadow-card transition">
                   Submit answer →
+                </button>
+                <button onClick={requestHint} disabled={thinking}
+                  className="px-4 py-2.5 rounded-xl bg-white border border-amber-300 text-sm font-bold text-amber-800 disabled:opacity-50">
+                  💡 Ask for a hint
                 </button>
                 <button onClick={() => submitAnswer({ skipped: true })} disabled={thinking}
                   className="px-4 py-2.5 rounded-xl bg-white border border-brand-200 text-sm font-bold text-slate-600 disabled:opacity-50">
@@ -621,69 +883,77 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
         </div>
       )}
 
-      {phase === 'done' && (
+      {phase === 'done' && report && (
         <div className="bg-white rounded-2xl shadow-card border border-brand-100 p-6 md:p-8">
           <h2 className="text-2xl font-extrabold text-brand-900">Interview report 📋</h2>
-          <p className="text-sm text-slate-500 mt-1">with 👩‍💻 Ananya · Senior Software Engineer · {aiUsed ? '🤖 Gemini' : '🎚️ Scripted'} mode</p>
+          <p className="text-sm text-slate-500 mt-1">with 👩‍💻 Ananya · Senior Software Engineer · {badge} · {focus} · {difficulty}</p>
           <div className="flex flex-wrap items-center gap-4 mt-4">
             <div className="bg-brand-700 text-white rounded-2xl px-6 py-4">
-              <p className="text-3xl font-extrabold">{scorePct}%</p>
+              <p className="text-3xl font-extrabold">{report.overallScore}%</p>
               <p className="text-brand-100 text-xs font-bold">overall score</p>
             </div>
-            <span className={`px-3 py-1.5 rounded-lg border text-sm font-extrabold ${BAND_STYLES[overallBand]}`}>{overallBand}</span>
-            <p className="text-slate-600 text-sm max-w-md leading-relaxed">
-              {overallBand === 'Strong' ? 'Strong round — keep this level and polish the shaky ones.'
-                : overallBand === 'Good' ? 'A workable base. The report below shows exactly what to revise.'
-                : 'Every expert started here — revise the topics below and run it again tomorrow.'}
-            </p>
+            <span className={`px-3 py-1.5 rounded-lg border text-sm font-extrabold ${BAND_STYLES[report.overallBand] || ''}`}>{report.overallBand}</span>
+            <span className="text-xs bg-brand-50 border border-brand-100 px-2 py-1 rounded-md font-semibold text-brand-700">{badge}</span>
           </div>
+          {report.summary && <p className="text-slate-600 text-sm leading-relaxed mt-4 max-w-3xl">{report.summary}</p>}
+
+          {(report.strengths?.length > 0 || report.gaps?.length > 0) && (
+            <div className="grid md:grid-cols-2 gap-4 mt-6">
+              <div className="border border-brand-100 rounded-xl px-4 py-3 bg-brand-50/50">
+                <p className="font-bold text-slate-800 text-sm">💪 Strengths</p>
+                {report.strengths?.length ? (
+                  <ul className="mt-2 space-y-1.5 text-sm text-slate-600 list-disc list-inside">
+                    {report.strengths.map((s, i) => <li key={i}>{s}</li>)}
+                  </ul>
+                ) : <p className="text-sm text-slate-500 mt-2">Keep building — answer in more depth to surface clear strengths.</p>}
+              </div>
+              <div className="border border-amber-200 rounded-xl px-4 py-3 bg-amber-50/60">
+                <p className="font-bold text-slate-800 text-sm">🎯 Gaps to revise</p>
+                {report.gaps?.length ? (
+                  <ul className="mt-2 space-y-1.5 text-sm text-slate-600 list-disc list-inside">
+                    {report.gaps.map((g, i) => <li key={i}>{g}</li>)}
+                  </ul>
+                ) : <p className="text-sm text-slate-500 mt-2">No major gaps flagged — polish accuracy next.</p>}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-3 mt-6">
-            {rows.map((r, i) => (
-              r.kind === 'warmup' ? (
-                <div key={i} className="border border-brand-100 rounded-xl overflow-hidden">
-                  <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-[#fbfdfc]">
-                    <span className="font-bold text-slate-800 text-sm flex-1">Warm-up. {r.question}</span>
-                    <span className="px-2.5 py-1 rounded-lg border text-xs font-extrabold bg-slate-100 text-slate-600 border-slate-200">unscored · {r.words} words</span>
-                  </div>
-                  <div className="px-4 py-3 text-sm">
-                    <p className="text-slate-600"><strong className="text-slate-800">You said:</strong> {r.transcript || <em>(skipped)</em>}</p>
+            {(report.perQuestion || []).map((r, i) => (
+              <div key={i} className="border border-brand-100 rounded-xl overflow-hidden">
+                <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-brand-50/60">
+                  <span className="font-bold text-slate-800 text-sm flex-1">{r.question}</span>
+                  <span className={`px-2.5 py-1 rounded-lg border text-xs font-extrabold ${BAND_STYLES[bandForScore((r.score || 0) * 10)] || ''}`}>{r.score}/10</span>
+                </div>
+                <div className="px-4 py-2">
+                  <div className="h-1.5 bg-brand-50 rounded-full overflow-hidden">
+                    <div className="h-full bg-brand-500 transition-all" style={{ width: `${(r.score || 0) * 10}%` }} />
                   </div>
                 </div>
-              ) : (
-                <div key={i} className="border border-brand-100 rounded-xl overflow-hidden">
-                  <div className="flex flex-wrap items-center gap-2 px-4 py-3 bg-[#fbfdfc]">
-                    <span className="font-bold text-slate-800 text-sm flex-1">{r.question}</span>
-                    <span className={`px-2.5 py-1 rounded-lg border text-xs font-extrabold ${BAND_STYLES[r.band]}`}>{r.band} · {r.score}%</span>
-                  </div>
-                  <div className="px-4 py-3 text-sm space-y-2">
-                    <p className="text-slate-600"><strong className="text-slate-800">You said:</strong> {r.transcript || <em>{r.skipped ? '(skipped)' : '(no answer)'}</em>}</p>
-                    {r.skipped && <p className="text-slate-500">⏭ You skipped this one.</p>}
-                    {r.hintUsed && <p className="text-slate-500">💡 Hint used on this one — totally fine, just note it for revision.</p>}
-                    {r.hitKeywords.length > 0 && (
-                      <p className="text-slate-600"><strong className="text-slate-800">You said well:</strong> {r.hitKeywords.slice(0, 6).map((k) => <code key={k} className="bg-brand-100 text-brand-900 px-1.5 py-0.5 rounded mx-0.5 font-mono text-[0.8em]">{k}</code>)}</p>
-                    )}
-                    {r.missedKeywords.length > 0 && (
-                      <p className="text-slate-500"><strong className="text-slate-700">Add next time:</strong> {r.missedKeywords.slice(0, 6).map((k) => <code key={k} className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded mx-0.5 font-mono text-[0.8em]">{k}</code>)}</p>
-                    )}
+                <div className="px-4 py-3 text-sm space-y-2">
+                  {(candidateBlocks[i] || r.transcript) && (
+                    <p className="text-slate-600"><strong className="text-slate-800">You said:</strong> {candidateBlocks[i] || r.transcript}</p>
+                  )}
+                  {r.feedback && <p className="text-slate-600"><strong className="text-slate-800">Feedback:</strong> {r.feedback}</p>}
+                  {r.modelAnswer && (
                     <details>
-                      <summary className="cursor-pointer font-semibold text-brand-700 text-[0.85rem]">Model answer</summary>
+                      <summary className="cursor-pointer font-semibold text-brand-700 text-[0.85rem]">Model answer (weakest answers only)</summary>
                       <p className="mt-1.5 text-slate-700 leading-relaxed">{r.modelAnswer}</p>
                     </details>
-                    <button onClick={() => onReadTopic(r.revTopic)} className="text-sm font-bold text-brand-700 hover:text-brand-500">
-                      {r.round === 'dsa' ? '📖 Revise DSA notes →' : r.round === 'project' ? '📖 Project pitch + HR tips →' : `📖 Revise ${topic?.title} notes →`}
-                    </button>
-                  </div>
+                  )}
                 </div>
-              )
+              </div>
             ))}
+            {(!report.perQuestion || report.perQuestion.length === 0) && (
+              <p className="text-sm text-slate-500">No scored questions in this session — start again and answer each question out loud, even briefly.</p>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2 mt-7">
-            <button onClick={() => onReadTopic(topicSel)} className="bg-brand-600 hover:bg-brand-500 text-white font-bold px-5 py-3 rounded-xl shadow-card">
-              📖 Revise {topic?.title} notes
+            <button onClick={() => onReadTopic(localSlug)} className="bg-brand-600 hover:bg-brand-500 text-white font-bold px-5 py-3 rounded-xl shadow-card">
+              📖 Revise {localTopicTitle} notes
             </button>
-            <button onClick={() => setPhase('setup')} className="bg-white border border-brand-200 font-bold px-5 py-3 rounded-xl text-brand-800">
+            <button onClick={newInterview} className="bg-white border border-brand-200 font-bold px-5 py-3 rounded-xl text-brand-800">
               ↻ New interview
             </button>
           </div>

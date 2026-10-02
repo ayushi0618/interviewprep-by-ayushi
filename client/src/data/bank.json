@@ -1167,6 +1167,494 @@
       ]
     }
   ],
+  "operating-systems": [
+    {
+      "question": "What is the difference between a process and a thread?",
+      "answer": "A process is a running program with its own private memory and resources, while a thread is a single path of execution inside a process. Threads of the same process share the heap, globals, and files but each keeps its own stack and registers. That makes threads much cheaper to create and switch between, but it also means one bad thread can corrupt data shared by all of them.",
+      "keywords": [
+        "process",
+        "thread",
+        "threads",
+        "also",
+        "cheaper",
+        "corrupt"
+      ]
+    },
+    {
+      "question": "What is a context switch, and why is it considered overhead?",
+      "answer": "A context switch is when the OS saves the running process's registers and program counter into its PCB and loads another process's saved state so it can run. During the switch itself the CPU does no useful work at all, which makes it pure overhead. It also leaves the new process's data cold in the cache, so the first accesses afterwards are slower than usual.",
+      "keywords": [
+        "process",
+        "switch",
+        "context",
+        "overhead",
+        "accesses",
+        "afterwards"
+      ]
+    },
+    {
+      "question": "FCFS, SJF, and Round Robin — how do they differ?",
+      "answer": "FCFS simply runs jobs in arrival order, but one long job can make everyone else wait behind it, the convoy effect. SJF runs the shortest job next, which gives the lowest average waiting time, but the OS cannot truly know future job lengths. Round Robin gives every ready process a fixed time quantum in rotation, so it is fair and responsive — but if the quantum is too small, context-switch cost starts to dominate.",
+      "keywords": [
+        "fcfs",
+        "gives",
+        "quantum",
+        "robin",
+        "round",
+        "runs"
+      ]
+    },
+    {
+      "question": "Mutex vs semaphore — when do you use each?",
+      "answer": "A mutex is a one-owner lock: whichever thread acquires it must be the one to release it, and it protects a single critical section. A semaphore is a guarded counter with wait and signal operations, so it can let several threads in at once or order events between threads. I reach for a mutex to protect shared data and a counting semaphore to manage a pool of limited resources like database connections.",
+      "keywords": [
+        "mutex",
+        "semaphore",
+        "threads",
+        "acquires",
+        "connections",
+        "counter"
+      ]
+    },
+    {
+      "question": "What is a deadlock, and how do you prevent it?",
+      "answer": "A deadlock is when processes wait forever, each holding a resource another one needs. It needs four conditions at once: mutual exclusion, hold-and-wait, no preemption, and a circular wait. Because all four must hold together, preventing it is about breaking one — the most practical trick is making everyone acquire locks in the same global order, which destroys the possibility of a cycle.",
+      "keywords": [
+        "deadlock",
+        "four",
+        "needs",
+        "wait",
+        "acquire",
+        "another"
+      ]
+    },
+    {
+      "question": "What is the banker's algorithm, in one breath?",
+      "answer": "It is a deadlock-avoidance scheme where the OS, before granting a resource, simulates whether every process could still finish in some order with what remains free. If that hypothetical state is safe, it grants; otherwise the process waits even though the resource is idle. It is elegant but rarely used directly because programs seldom know their maximum resource needs in advance.",
+      "keywords": [
+        "resource",
+        "process",
+        "advance",
+        "algorithm",
+        "banker",
+        "because"
+      ]
+    },
+    {
+      "question": "Explain paging and the role of the page table.",
+      "answer": "Paging divides physical memory into fixed-size frames and a process's logical memory into same-size pages, so a page can sit in any free frame and we avoid needing one continuous block. The page table maps each page to the frame holding it, and every address splits into a page number plus an offset inside the page. The TLB caches recent translations so this double lookup stays fast in practice.",
+      "keywords": [
+        "page",
+        "frame",
+        "memory",
+        "paging",
+        "table",
+        "address"
+      ]
+    },
+    {
+      "question": "What happens during a page fault?",
+      "answer": "The program touches a page that is marked not-present, so the hardware traps into the OS. The OS finds a free frame — evicting and writing back a victim if memory is full — loads the needed page from disk, updates the page table, and restarts the instruction. Because disk is involved, a page fault is enormously more expensive than an ordinary memory access.",
+      "keywords": [
+        "page",
+        "disk",
+        "fault",
+        "memory",
+        "access",
+        "back"
+      ]
+    },
+    {
+      "question": "FIFO vs LRU page replacement — which is better and why?",
+      "answer": "FIFO evicts the page that arrived first, ignoring whether it is still being used, and it can even suffer Bélády's anomaly. LRU evicts the page that has gone unused the longest, which matches how programs actually behave — recently used pages tend to be used again soon. LRU is harder to implement exactly, so real systems approximate it, but as a policy it consistently produces fewer faults.",
+      "keywords": [
+        "page",
+        "used",
+        "evicts",
+        "fifo",
+        "which",
+        "actually"
+      ]
+    },
+    {
+      "question": "What is thrashing and how do you fix it?",
+      "answer": "Thrashing is when the system spends most of its time handling page faults instead of running programs, because processes keep stealing frames from each other. The usual trigger is too many processes competing for too little RAM. The fix is counterintuitive but simple — suspend some processes or add memory; a better replacement algorithm cannot save a system that is fundamentally over-committed.",
+      "keywords": [
+        "processes",
+        "system",
+        "thrashing",
+        "algorithm",
+        "because",
+        "better"
+      ]
+    }
+  ],
+  "dbms": [
+    {
+      "question": "What is the difference between a primary key, a candidate key, and a foreign key?",
+      "answer": "A primary key is the chosen identifier of a row — unique, never NULL, one per table. Candidate keys are all the other column sets that could have been chosen because they are also fully unique. A foreign key is different in kind: it lives in another table and points back at a primary key, which is how the database enforces that a relationship actually refers to a real row.",
+      "keywords": [
+        "primary",
+        "candidate",
+        "chosen",
+        "foreign",
+        "table",
+        "unique"
+      ]
+    },
+    {
+      "question": "How do you convert a many-to-many relationship into tables?",
+      "answer": "You cannot store it directly in either table, so you create a junction table — say Enrollments for students and courses — with one row per pairing. Its primary key is typically the composite of the two foreign keys, and it is also the natural home for facts about the pairing itself, like the enrolment date or grade. That one extra table keeps both original tables clean and free of duplicated data.",
+      "keywords": [
+        "table",
+        "pairing",
+        "tables",
+        "also",
+        "cannot",
+        "clean"
+      ]
+    },
+    {
+      "question": "Explain normalization with a quick example of 1NF to 3NF.",
+      "answer": "First normal form means every cell is atomic — no lists inside a column, so an order holding \"Pen, Notebook\" splits into rows. Second normal form removes partial dependencies: with a composite key, a column like customer name that depends on only part of the key moves out. Third normal form removes transitive dependencies — if city depends on the customer rather than the order, it belongs in the customer table, so each fact is stored exactly once.",
+      "keywords": [
+        "customer",
+        "form",
+        "normal",
+        "column",
+        "dependencies",
+        "depends"
+      ]
+    },
+    {
+      "question": "What is an index, why does it make queries fast, and what's the catch?",
+      "answer": "An index is a sorted lookup structure, usually a B-tree, that the database maintains separately from the table, so a search can jump to the matching rows in a few page reads instead of scanning everything. The tree is shallow because each node fans out to hundreds of children. The catch is that writes get slower and storage grows, since every insert, update, and delete has to maintain the index too.",
+      "keywords": [
+        "index",
+        "catch",
+        "b-tree",
+        "because",
+        "children",
+        "database"
+      ]
+    },
+    {
+      "question": "B-tree vs B+ tree — what's the difference?",
+      "answer": "In a B-tree, keys and row pointers can live in any node, and the leaves are not connected to each other. In a B+ tree, all row pointers sit only in the leaves and the leaves are chained in sorted order, so range queries can scan leaf to leaf without climbing the tree. That is exactly why B+ trees are the standard choice in real database indexes.",
+      "keywords": [
+        "leaves",
+        "tree",
+        "b-tree",
+        "leaf",
+        "pointers",
+        "chained"
+      ]
+    },
+    {
+      "question": "Clustered vs non-clustered index?",
+      "answer": "A clustered index defines the physical storage order of the rows themselves, so there can be only one — in InnoDB it is the primary key index. A non-clustered or secondary index is a separate sorted structure whose leaves hold the indexed value plus a pointer back to the row. If that second hop matters, I design a covering index that already contains the columns the query needs.",
+      "keywords": [
+        "index",
+        "clustered",
+        "non-clustered",
+        "already",
+        "back",
+        "columns"
+      ]
+    },
+    {
+      "question": "Walk me through ACID with one example.",
+      "answer": "Take a ₹500 bank transfer. Atomicity means the debit and credit both happen or neither does. Consistency means the total money in the system stays valid and no rule like a negative balance is violated. Isolation means a transfer running at the same time on the same account does not see my half-finished work, and durability means that once it commits, a power cut cannot erase it because the change is already in durable storage.",
+      "keywords": [
+        "means",
+        "transfer",
+        "account",
+        "acid",
+        "already",
+        "atomicity"
+      ]
+    },
+    {
+      "question": "What are dirty reads, non-repeatable reads, and phantom reads?",
+      "answer": "A dirty read is reading someone else's uncommitted change, which may be rolled back and never really exist. A non-repeatable read is reading the same row twice in one transaction and getting different values because someone updated it in between. A phantom is re-running the same filter query and seeing rows appear or disappear because someone inserted a matching row — the row itself is new, not just changed.",
+      "keywords": [
+        "reads",
+        "someone",
+        "because",
+        "dirty",
+        "non-repeatable",
+        "phantom"
+      ]
+    },
+    {
+      "question": "Which isolation level prevents what?",
+      "answer": "Read Uncommitted prevents nothing and allows even dirty reads, but it is the cheapest. Read Committed blocks dirty reads and is the default in many databases. Repeatable Read additionally guarantees the same row reads identically all through the transaction, and Serializable prevents phantoms as well by making the outcome equivalent to running transactions one after another — the safest, and the slowest.",
+      "keywords": [
+        "prevents",
+        "read",
+        "reads",
+        "dirty",
+        "additionally",
+        "allows"
+      ]
+    },
+    {
+      "question": "What is MVCC in one line?",
+      "answer": "MVCC, or multi-version concurrency control, keeps several versions of a row so each transaction reads a consistent snapshot from its own start time. The big win is that readers never block writers and writers never block readers, so concurrency goes way up. The price is extra storage for old versions plus periodic cleanup of versions nobody can see anymore.",
+      "keywords": [
+        "versions",
+        "block",
+        "concurrency",
+        "mvcc",
+        "never",
+        "readers"
+      ]
+    }
+  ],
+  "computer-networks": [
+    {
+      "question": "What are the OSI layers, and how does TCP/IP differ?",
+      "answer": "OSI is a seven-layer teaching model, from physical cables up to the application, where each layer serves the one above it. TCP/IP is the model the real Internet runs on and has four layers — its application layer absorbs OSI's top three. The layers I always name precisely are transport, where TCP and UDP live, and network, where IP addresses and routing live.",
+      "keywords": [
+        "layers",
+        "where",
+        "application",
+        "layer",
+        "live",
+        "model"
+      ]
+    },
+    {
+      "question": "Explain the TCP three-way handshake.",
+      "answer": "The client sends a SYN asking to open a connection and proposing a starting sequence number, and the server replies with SYN-ACK, agreeing and proposing its own number. The client answers ACK, and only then does any real data flow. This exchange synchronises both sides' sequence numbers, which is what later makes in-order, guaranteed delivery possible.",
+      "keywords": [
+        "client",
+        "number",
+        "proposing",
+        "sequence",
+        "agreeing",
+        "answers"
+      ]
+    },
+    {
+      "question": "TCP vs UDP — when is each the right choice?",
+      "answer": "TCP guarantees in-order, complete delivery with retransmissions and acknowledgements, at the cost of a handshake and more delay. UDP guarantees nothing but is fast and lightweight, which is perfect when a late packet is useless anyway. So files, web pages, and emails ride on TCP, while live calls, games, and small DNS lookups ride on UDP.",
+      "keywords": [
+        "guarantees",
+        "ride",
+        "acknowledgements",
+        "anyway",
+        "calls",
+        "choice"
+      ]
+    },
+    {
+      "question": "What is the difference between HTTP and HTTPS?",
+      "answer": "HTTP sends requests and responses as readable plain text, so anyone positioned between you and the server can read or modify them. HTTPS carries that same HTTP inside a TLS tunnel: the server proves its identity with a certificate, both sides agree on a session key, and everything after is encrypted and tamper-checked. So HTTPS adds confidentiality, integrity, and authentication on top of plain HTTP.",
+      "keywords": [
+        "http",
+        "https",
+        "plain",
+        "server",
+        "adds",
+        "agree"
+      ]
+    },
+    {
+      "question": "Describe the TLS handshake in plain words.",
+      "answer": "First the browser and server agree on encryption settings, then the server shows a certificate signed by a trusted authority to prove it owns the domain. Using asymmetric cryptography they safely agree on a fresh symmetric key, which is the fast kind of encryption. After that, the entire conversation travels encrypted under that session key, so slow asymmetric crypto is used only for the introduction.",
+      "keywords": [
+        "agree",
+        "asymmetric",
+        "encryption",
+        "server",
+        "authority",
+        "browser"
+      ]
+    },
+    {
+      "question": "How does DNS resolution work, step by step?",
+      "answer": "The browser and OS check their caches first. If the answer is not cached, a recursive resolver asks a root server who handles the top-level domain, then asks that TLD server who is authoritative for the domain, then asks the authoritative server for the actual address record. The IP comes back and is cached at each level according to its TTL, which is why lookups are usually so fast.",
+      "keywords": [
+        "asks",
+        "server",
+        "authoritative",
+        "cached",
+        "domain",
+        "step"
+      ]
+    },
+    {
+      "question": "GET vs POST — and name a few status codes.",
+      "answer": "GET only reads a resource, carries its parameters in the URL, and should never change anything on the server. POST sends data in the body, usually to create something, and repeating it creates duplicates, so it is not idempotent. For statuses: 200 means OK, 201 Created, 404 means the resource is not found, 401 means you are not logged in, and 500 means the server itself failed.",
+      "keywords": [
+        "means",
+        "post",
+        "resource",
+        "server",
+        "anything",
+        "body"
+      ]
+    },
+    {
+      "question": "What is NAT, and why do we need it?",
+      "answer": "NAT is the router rewriting addresses so many devices on private addresses can share a single public IP. It uses port numbers to remember which internal device owns which outgoing conversation, then translates the replies back. We need it because IPv4 addresses ran out, and as a bonus it hides the internal structure of a home or office network.",
+      "keywords": [
+        "addresses",
+        "internal",
+        "need",
+        "which",
+        "back",
+        "because"
+      ]
+    },
+    {
+      "question": "What is the difference between an IP address and a MAC address?",
+      "answer": "An IP address is a logical, hierarchical address that identifies a device on a network and changes when you join a different network; routers use it to forward packets across networks. A MAC address is a physical address burned into the network card, unique to that hardware, and it only matters within one local link. In short: IP gets the packet across the world, MAC makes the final hop to the right machine.",
+      "keywords": [
+        "address",
+        "network",
+        "across",
+        "burned",
+        "card",
+        "changes"
+      ]
+    },
+    {
+      "question": "What happens when you type a URL in the browser, network edition?",
+      "answer": "First DNS converts the domain name into the server's IP address. Since that IP is on another network, my machine sends the packet to its default gateway, NAT rewrites it on the way out, and routers forward it hop by hop. Then the TCP handshake opens the connection, the TLS handshake secures it for HTTPS, and only after that does the browser send its HTTP GET request and receive the page.",
+      "keywords": [
+        "browser",
+        "handshake",
+        "network",
+        "address",
+        "another",
+        "connection"
+      ]
+    }
+  ],
+  "oop": [
+    {
+      "question": "What are the four pillars of OOP? Explain each in one line.",
+      "answer": "Encapsulation hides a class's data behind methods that enforce the rules. Abstraction exposes only a simple interface, so an interface can promise pay() without saying how. Inheritance lets a child class reuse and specialise a parent's behaviour along genuine is-a lines, and polymorphism lets the same method call behave according to the actual object, whether that is a dog barking or a cat meowing.",
+      "keywords": [
+        "class",
+        "interface",
+        "lets",
+        "abstraction",
+        "according",
+        "actual"
+      ]
+    },
+    {
+      "question": "Encapsulation vs abstraction — aren't they the same?",
+      "answer": "They are cousins, not twins. Encapsulation is about protection: bundle the data with its methods and keep the raw data private so rules cannot be bypassed. Abstraction is about simplification: present a clean, minimal interface and hide complexity behind it. A car's steering wheel is abstraction facing the driver, while the locked gearbox casing that stops you touching the gears is encapsulation.",
+      "keywords": [
+        "abstraction",
+        "encapsulation",
+        "data",
+        "they",
+        "aren",
+        "behind"
+      ]
+    },
+    {
+      "question": "What is the difference between method overloading and overriding?",
+      "answer": "Overloading is same name, different parameters, decided at compile time — like having add(int, int) and add(double, double). Overriding is a child class replacing a parent's method with its own version, decided at runtime based on the actual object. People remember it as: overloading changes the signature, overriding changes the behaviour.",
+      "keywords": [
+        "overloading",
+        "overriding",
+        "changes",
+        "decided",
+        "double",
+        "method"
+      ]
+    },
+    {
+      "question": "Why prefer composition over inheritance?",
+      "answer": "Composition builds an object from parts it has, so I can swap an engine or a storage strategy at runtime and test each part alone. Inheritance locks in an is-a chain at compile time and couples child classes tightly to the parent's internals, so a change high in the hierarchy can break descendants quietly. Inheritance is genuinely right for stable is-a relationships, but composition is the safer default.",
+      "keywords": [
+        "composition",
+        "inheritance",
+        "is-a",
+        "alone",
+        "break",
+        "builds"
+      ]
+    },
+    {
+      "question": "Explain the SOLID principles briefly.",
+      "answer": "Single responsibility: one class, one reason to change. Open/closed: add behaviour by adding code, not editing existing code, usually via interfaces. Liskov substitution: a subclass must work anywhere its parent is used without surprises. Interface segregation: many small interfaces beat one fat interface clients must half-implement. Dependency inversion: depend on abstractions, and inject concrete implementations from outside.",
+      "keywords": [
+        "code",
+        "interface",
+        "interfaces",
+        "must",
+        "abstractions",
+        "adding"
+      ]
+    },
+    {
+      "question": "How does OOP work in JavaScript if it is prototype-based?",
+      "answer": "JavaScript objects inherit directly from other objects through a prototype chain — when a property is missing, the engine looks up the chain. The class keyword from ES6 is syntax on top of that machinery, not a replacement for it. So classes in JavaScript are still flexible and dynamic: I can add methods to prototypes at runtime, and truly private fields now exist with the hash prefix.",
+      "keywords": [
+        "javascript",
+        "chain",
+        "objects",
+        "class",
+        "classes",
+        "directly"
+      ]
+    },
+    {
+      "question": "Class-based vs prototype-based — name a practical difference.",
+      "answer": "In Java or C++, a class is compiled and fixed, and objects cannot gain new methods after creation. In JavaScript, objects are dynamic — I can add properties and methods at runtime, and objects can inherit straight from other objects without any class in between. I would also note the access difference: JavaScript makes privacy real with hash-prefixed fields, while Java and C++ use private access modifiers checked at compile time.",
+      "keywords": [
+        "objects",
+        "access",
+        "class",
+        "difference",
+        "java",
+        "javascript"
+      ]
+    },
+    {
+      "question": "What is a Singleton, and when is it useful?",
+      "answer": "A Singleton ensures exactly one instance of a class exists, with a single global way to access it. It fits things that are genuinely singular — application configuration, a database connection pool, a logger. The risk is that it behaves like a hidden global variable, which makes testing harder, so I use it deliberately rather than by default.",
+      "keywords": [
+        "global",
+        "singleton",
+        "access",
+        "application",
+        "behaves",
+        "class"
+      ]
+    },
+    {
+      "question": "Factory pattern — what problem does it solve?",
+      "answer": "It centralises object creation. Instead of every caller doing new on a concrete class and hard-coding which one, callers ask the factory for what they need by name or type. When a new type appears, I update the factory and one set of tests, instead of hunting down construction code spread across the application.",
+      "keywords": [
+        "factory",
+        "instead",
+        "type",
+        "across",
+        "appears",
+        "application"
+      ]
+    },
+    {
+      "question": "What is the Observer pattern? Give a real example.",
+      "answer": "A subject maintains a list of observers and notifies them whenever its state changes; observers react independently. Every button click handler and event listener is this pattern. On the backend, an order service emitting \"order placed\" events so email, inventory, and analytics each react without the order service knowing they exist is exactly the same shape.",
+      "keywords": [
+        "order",
+        "observers",
+        "pattern",
+        "react",
+        "service",
+        "analytics"
+      ]
+    }
+  ],
   "git-cs": [
     {
       "question": "`git fetch` vs `git pull`?",

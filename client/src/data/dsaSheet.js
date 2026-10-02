@@ -2036,6 +2036,444 @@ function lengthOfLIS(nums) {
       { args: [[2, 2, 2]], expected: 1 },
     ],
   },
+  // ------------------------------------------------ Sheet growth (appended at the end so existing plan keys stay stable)
+  {
+    id: 'product-except-self',
+    topic: 'arrays',
+    title: 'Product of Array Except Self',
+    difficulty: 'Medium',
+    statement: 'You are given an array of numbers. Build a new array where the value at each position is the product of every number in the input except the number at that same position. Solve it without using division, so zeroes in the input are handled naturally.',
+    examples: [
+      { input: 'nums = [1,2,3,4]', output: '[24, 12, 8, 6]', explanation: 'For the first position, 2 * 3 * 4 = 24. For the second, 1 * 3 * 4 = 12, and so on for the rest.' },
+      { input: 'nums = [-1,1,0,-3,3]', output: '[0, 0, 9, 0, 0]', explanation: 'Only the position holding 0 keeps a non-zero product, because every other position still multiplies by that 0. The surviving product is -1 * 1 * -3 * 3 = 9.' },
+    ],
+    constraints: '1 <= nums.length <= 10^5 · -30 <= nums[i] <= 30 · every answer value fits in a 32-bit signed integer',
+    fn: 'productExceptSelf',
+    kind: 'plain',
+    normalize: 'none',
+    starterCode: `// productExceptSelf(nums) -> new array, each slot the product of all other values
+function productExceptSelf(nums) {
+  // TODO: combine the product from the left with the product from the right
+}`,
+    hints: [
+      'The answer for a position splits into two parts: everything before it and everything after it. How can you know both products in two passes?',
+      'First pass left to right stores the running product of all values before each index. Second pass right to left multiplies in the running product of all values after each index.',
+    ],
+    explanation: 'For each position, the values that count are exactly the ones on its left multiplied by the ones on its right. A left-to-right pass writes into the answer the product of everything before each index, starting from 1 at the first position. A right-to-left pass then carries the product of everything after each index and multiplies it in. Because no division is ever used, zeroes need no special case: any position that still includes a zero in its range naturally ends up as zero.',
+    complexity: 'Time O(n) · Space O(1) extra',
+    solutionCode: `function productExceptSelf(nums) {
+  const n = nums.length;
+  const answer = new Array(n);
+  let prefix = 1;
+  for (let i = 0; i < n; i++) {
+    answer[i] = prefix;
+    prefix *= nums[i];
+  }
+  let suffix = 1;
+  for (let i = n - 1; i >= 0; i--) {
+    answer[i] *= suffix;
+    suffix *= nums[i];
+  }
+  return answer;
+}`,
+    visibleTests: [
+      { args: [[1, 2, 3, 4]], expected: [24, 12, 8, 6] },
+      { args: [[-1, 1, 0, -3, 3]], expected: [0, 0, 9, 0, 0] },
+    ],
+    hiddenTests: [
+      { args: [[2, 2, 3]], expected: [6, 6, 4] },
+      { args: [[5]], expected: [1] },
+      { args: [[0, 0]], expected: [0, 0] },
+      { args: [[3, -2, 4]], expected: [-8, 12, -6] },
+      { args: [[1, 0, 2]], expected: [0, 2, 0] },
+    ],
+  },
+  {
+    id: 'search-rotated-array',
+    topic: 'binary-search',
+    title: 'Search in Rotated Sorted Array',
+    difficulty: 'Medium',
+    statement: 'An array of distinct numbers was sorted in ascending order and then rotated at an unknown pivot, so a suffix of the sorted order now sits at the front. Given that rotated array and a target value, return the index of the target, or -1 when the target is absent. Aim for a logarithmic search rather than a full scan.',
+    examples: [
+      { input: 'nums = [4,5,6,7,0,1,2], target = 0', output: '4', explanation: 'The value 0 sits at index 4, just after the rotation point.' },
+      { input: 'nums = [4,5,6,7,0,1,2], target = 3', output: '-1', explanation: 'The value 3 appears nowhere in the array, so the answer is -1.' },
+    ],
+    constraints: '1 <= nums.length <= 5000 · all values in nums are distinct · -10^4 <= nums[i], target <= 10^4',
+    fn: 'searchRotated',
+    kind: 'plain',
+    normalize: 'none',
+    starterCode: `// searchRotated(nums, target) -> index of target in the rotated array, or -1
+function searchRotated(nums, target) {
+  // TODO: work out which half is sorted, then decide where the target can live
+}`,
+    hints: [
+      'In any middle split, at least one of the two halves is still in sorted order. How does that tell you whether the target can be inside that half?',
+      'Compare the middle value with the left end to find the sorted half. If the target lies inside the sorted half range, search there; otherwise search the other half.',
+    ],
+    explanation: 'Even after rotation, cutting the array at a middle index always leaves at least one side fully sorted. We compare the middle value with the value at the left edge to learn which side is sorted. If the target falls inside the sorted side value range, the target can only live on that side, so we keep that half; otherwise we keep the other half. Each step discards half of the remaining range, which gives the logarithmic running time.',
+    complexity: 'Time O(log n) · Space O(1)',
+    solutionCode: `function searchRotated(nums, target) {
+  let left = 0;
+  let right = nums.length - 1;
+  while (left <= right) {
+    const mid = Math.floor((left + right) / 2);
+    if (nums[mid] === target) return mid;
+    if (nums[left] <= nums[mid]) {
+      if (target >= nums[left] && target < nums[mid]) right = mid - 1;
+      else left = mid + 1;
+    } else {
+      if (target > nums[mid] && target <= nums[right]) left = mid + 1;
+      else right = mid - 1;
+    }
+  }
+  return -1;
+}`,
+    visibleTests: [
+      { args: [[4, 5, 6, 7, 0, 1, 2], 0], expected: 4 },
+      { args: [[4, 5, 6, 7, 0, 1, 2], 3], expected: -1 },
+    ],
+    hiddenTests: [
+      { args: [[1], 0], expected: -1 },
+      { args: [[1], 1], expected: 0 },
+      { args: [[5, 1, 3], 3], expected: 2 },
+      { args: [[6, 7, 1, 2, 3, 4, 5], 6], expected: 0 },
+      { args: [[3, 4, 5, 1, 2], 2], expected: 4 },
+    ],
+  },
+  {
+    id: 'top-k-frequent',
+    topic: 'hashing',
+    title: 'Top K Frequent Elements',
+    difficulty: 'Medium',
+    statement: 'Given an array of numbers and a count k, return the k distinct values that appear most often in the array. The order of the returned values does not matter, and the tests compare answers as unordered groups. You may assume the top k set is unambiguous, meaning no tie sits exactly on the cutoff.',
+    examples: [
+      { input: 'nums = [1,1,1,2,2,3], k = 2', output: '[1, 2]', explanation: 'The value 1 appears three times and 2 appears twice, so they are the two most frequent values.' },
+      { input: 'nums = [1], k = 1', output: '[1]', explanation: 'There is only one distinct value, and it is trivially the most frequent one.' },
+    ],
+    constraints: '1 <= nums.length <= 10^5 · 1 <= k <= number of distinct values · -10^4 <= nums[i] <= 10^4',
+    fn: 'topKFrequent',
+    kind: 'plain',
+    normalize: 'sortArray',
+    starterCode: `// topKFrequent(nums, k) -> the k most frequent values, in any order
+function topKFrequent(nums, k) {
+  // TODO: count how often each value appears, then keep the k highest counts
+}`,
+    hints: [
+      'First you need a frequency for every distinct value. What structure gives you that in one pass?',
+      'Count with a map, turn the entries into a list, order that list by count from high to low, and take the values from the first k entries.',
+    ],
+    explanation: 'We first count occurrences, storing each distinct value once together with how many times it appeared. Sorting those distinct entries by their counts from largest to smallest puts the most frequent values at the front, so the answer is the values of the first k entries. Counting costs linear time, and the sort only touches distinct values, which keeps the method simple and fast enough for interview size inputs.',
+    complexity: 'Time O(n log n) · Space O(n)',
+    solutionCode: `function topKFrequent(nums, k) {
+  const counts = new Map();
+  for (const x of nums) counts.set(x, (counts.get(x) || 0) + 1);
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, k)
+    .map((entry) => entry[0]);
+}`,
+    visibleTests: [
+      { args: [[1, 1, 1, 2, 2, 3], 2], expected: [1, 2] },
+      { args: [[1], 1], expected: [1] },
+    ],
+    hiddenTests: [
+      { args: [[1, 1, 2, 2, 2, 3], 2], expected: [1, 2] },
+      { args: [[4, 4, 4, 2, 2, 1], 2], expected: [4, 2] },
+      { args: [[7, 7, 7, 7, 8, 8, 9], 2], expected: [7, 8] },
+      { args: [[10, 20, 10, 30, 20, 10], 3], expected: [10, 20, 30] },
+      { args: [[9, 9, 8], 1], expected: [9] },
+    ],
+  },
+  {
+    id: 'evaluate-rpn',
+    topic: 'stack-queue',
+    title: 'Evaluate Reverse Polish Notation',
+    difficulty: 'Medium',
+    statement: 'You are given a list of string tokens that forms a valid arithmetic expression written in Reverse Polish Notation, where each operator follows the values it acts on. Each token is either an integer written as text, possibly negative or with several digits, or one of the operators +, -, * and /. Evaluate the expression and return the final integer. Division must truncate toward zero, so 7 divided by 2 gives 3 and -7 divided by 2 gives -3.',
+    examples: [
+      { input: 'tokens = ["2","1","+","3","*"]', output: '9', explanation: 'The plus first combines 2 and 1 into 3, and multiplying that 3 by the final 3 gives 9.' },
+      { input: 'tokens = ["4","13","5","/","+"]', output: '6', explanation: 'Dividing 13 by 5 truncates to 2, and 4 plus 2 gives 6.' },
+    ],
+    constraints: '1 <= tokens.length <= 10^4 · each token is an operator or an integer in [-200, 200] written as text · the expression is always valid and every division has a non-zero divisor',
+    fn: 'evalRPN',
+    kind: 'plain',
+    normalize: 'none',
+    starterCode: `// evalRPN(tokens) -> integer value of the Reverse Polish expression
+function evalRPN(tokens) {
+  // TODO: push numbers onto a stack; on an operator, pop two values and push the result
+}`,
+    hints: [
+      'Numbers simply wait until an operator needs them. Which end of a stack gives you the most recent waiting numbers first?',
+      'Push every number. On an operator, pop the right-hand value first and the left-hand value second, compute left operator right, and push the result back.',
+    ],
+    explanation: 'A stack matches the structure of this notation, because an operator always applies to the two most recently seen values. We push numbers as we meet them. When an operator appears, we pop the top value as the right-hand side and the next value as the left-hand side, compute the result, and push it back for later operators to use. Division uses truncation toward zero rather than rounding down, which matters for negative results. At the end, the single remaining value is the value of the whole expression.',
+    complexity: 'Time O(n) · Space O(n)',
+    solutionCode: `function evalRPN(tokens) {
+  const stack = [];
+  for (const token of tokens) {
+    if (token === '+' || token === '-' || token === '*' || token === '/') {
+      const right = stack.pop();
+      const left = stack.pop();
+      if (token === '+') stack.push(left + right);
+      else if (token === '-') stack.push(left - right);
+      else if (token === '*') stack.push(left * right);
+      else stack.push(Math.trunc(left / right));
+    } else {
+      stack.push(Number(token));
+    }
+  }
+  return stack[0];
+}`,
+    visibleTests: [
+      { args: [["2", "1", "+", "3", "*"]], expected: 9 },
+      { args: [["4", "13", "5", "/", "+"]], expected: 6 },
+    ],
+    hiddenTests: [
+      { args: [["3", "4", "+"]], expected: 7 },
+      { args: [["5", "3", "-"]], expected: 2 },
+      { args: [["7", "2", "/"]], expected: 3 },
+      { args: [["-7", "2", "/"]], expected: -3 },
+      { args: [["3", "-4", "*"]], expected: -12 },
+      { args: [["18"]], expected: 18 },
+    ],
+  },
+  {
+    id: 'validate-bst',
+    topic: 'trees',
+    title: 'Validate Binary Search Tree',
+    difficulty: 'Medium',
+    statement: 'Given the root of a binary tree, decide whether it is a valid binary search tree and return true or false. In a valid tree, every value in the left subtree of a node is strictly smaller than the value of that node, and every value in the right subtree is strictly larger. An empty tree counts as valid. The root is described as a level-order array where null marks a missing node.',
+    examples: [
+      { input: 'root = [2,1,3]', output: 'true', explanation: 'The value 1 is smaller than 2 on the left and 3 is larger than 2 on the right, so the ordering holds.' },
+      { input: 'root = [5,1,4,null,null,3,6]', output: 'false', explanation: 'The value 3 sits in the right subtree of 5 but is smaller than 5, so the tree breaks the search ordering.' },
+    ],
+    constraints: '0 <= number of nodes <= 10^4 · node values fit in a signed 32-bit integer',
+    fn: 'isValidBST',
+    kind: 'tree-value',
+    normalize: 'none',
+    starterCode: `// isValidBST(root) -> true when the tree obeys strict search ordering; nodes look like { val, left, right }
+function isValidBST(root) {
+  // TODO: carry an allowed range down the tree and check every node against it
+}`,
+    hints: [
+      'Checking a node only against its direct children misses violations deeper in the subtree. What extra information should travel down with the recursion?',
+      'Pass down a low bound and a high bound. Every node must sit strictly between them, and each child tightens one side of the range.',
+    ],
+    explanation: 'A node must respect not only its parent but every ancestor, so a parent-only check can miss a value that is locally fine yet globally wrong. We carry an allowed interval down the tree: the root may hold anything, the left child must stay below the current value, and the right child must stay above it, with the far bound inherited unchanged. If any node falls outside its interval, the tree is invalid; reaching every node without a violation proves the strict ordering holds everywhere.',
+    complexity: 'Time O(n) · Space O(n)',
+    solutionCode: `function isValidBST(root) {
+  const check = (node, low, high) => {
+    if (!node) return true;
+    if (node.val <= low || node.val >= high) return false;
+    return check(node.left, low, node.val) && check(node.right, node.val, high);
+  };
+  return check(root, -Infinity, Infinity);
+}`,
+    visibleTests: [
+      { args: [[2, 1, 3]], expected: true },
+      { args: [[5, 1, 4, null, null, 3, 6]], expected: false },
+    ],
+    hiddenTests: [
+      { args: [[]], expected: true },
+      { args: [[1]], expected: true },
+      { args: [[10, 5, 15, null, null, 6, 20]], expected: false },
+      { args: [[3, 1, 5, 0, 2, 4, 6]], expected: true },
+      { args: [[5, 4, 6, null, null, 3, 7]], expected: false },
+      { args: [[2, 2, 2]], expected: false },
+    ],
+  },
+  {
+    id: 'lowest-common-ancestor-bst',
+    topic: 'trees',
+    title: 'Lowest Common Ancestor of a BST',
+    difficulty: 'Medium',
+    statement: 'Given the root of a binary search tree and two values p and q that are guaranteed to appear in the tree, find their lowest common ancestor and return the value stored at that ancestor node. The lowest common ancestor is the deepest node that has both target values in its subtree, where a node counts as part of its own subtree. The root is described as a level-order array where null marks a missing node.',
+    examples: [
+      { input: 'root = [6,2,8,0,4,7,9,null,null,3,5], p = 2, q = 8', output: '6', explanation: 'The values 2 and 8 live in different subtrees of the root, so the root value 6 is their lowest common ancestor.' },
+      { input: 'root = [6,2,8,0,4,7,9,null,null,3,5], p = 2, q = 4', output: '2', explanation: 'The value 4 sits inside the subtree of 2, so 2 itself is the lowest common ancestor.' },
+    ],
+    constraints: '2 <= number of nodes <= 10^5 · all values in the tree are distinct · p and q both appear in the tree',
+    fn: 'lowestCommonAncestor',
+    kind: 'tree-value',
+    normalize: 'none',
+    starterCode: `// lowestCommonAncestor(root, p, q) -> value of the lowest common ancestor node; nodes look like { val, left, right }
+function lowestCommonAncestor(root, p, q) {
+  // TODO: use the search ordering to walk toward the split point of p and q
+}`,
+    hints: [
+      'In a search tree, comparing both targets with the current value tells you which subtree holds them. When do both targets stop agreeing on a direction?',
+      'If both targets are smaller than the current value, move left; if both are larger, move right. Otherwise the current node is the split point and its value is the answer.',
+    ],
+    explanation: 'The search ordering tells us where each target lives relative to any node. While both targets sit on the same side of the current node, their ancestor must also sit on that side, so we walk into that subtree. The first node where the targets separate to different sides, or where one target equals the node itself, is the deepest node whose subtree still contains both targets, and that node is exactly the lowest common ancestor. We return its stored value as required.',
+    complexity: 'Time O(n) · Space O(1)',
+    solutionCode: `function lowestCommonAncestor(root, p, q) {
+  let node = root;
+  while (node) {
+    if (p < node.val && q < node.val) node = node.left;
+    else if (p > node.val && q > node.val) node = node.right;
+    else return node.val;
+  }
+  return null;
+}`,
+    visibleTests: [
+      { args: [[6, 2, 8, 0, 4, 7, 9, null, null, 3, 5], 2, 8], expected: 6 },
+      { args: [[6, 2, 8, 0, 4, 7, 9, null, null, 3, 5], 2, 4], expected: 2 },
+    ],
+    hiddenTests: [
+      { args: [[6, 2, 8, 0, 4, 7, 9, null, null, 3, 5], 0, 5], expected: 2 },
+      { args: [[6, 2, 8, 0, 4, 7, 9, null, null, 3, 5], 3, 5], expected: 4 },
+      { args: [[6, 2, 8, 0, 4, 7, 9, null, null, 3, 5], 7, 9], expected: 8 },
+      { args: [[2, 1, 3], 1, 3], expected: 2 },
+      { args: [[5, 3, 7, 2, 4, 6, 8], 2, 4], expected: 3 },
+    ],
+  },
+  {
+    id: 'word-break',
+    topic: 'dp',
+    title: 'Word Break',
+    difficulty: 'Medium',
+    statement: 'Given a string s and a list of dictionary words, decide whether s can be cut into a sequence of dictionary words placed back to back with nothing left over, and return true or false. Dictionary words may be reused as many times as needed, and the whole string must be covered exactly.',
+    examples: [
+      { input: 's = "leetcode", wordDict = ["leet","code"]', output: 'true', explanation: 'The string splits into leet followed by code, covering every character.' },
+      { input: 's = "catsandog", wordDict = ["cats","dog","sand","and","cat"]', output: 'false', explanation: 'Every attempted split leaves a small leftover piece that no dictionary word can cover, so no full split exists.' },
+    ],
+    constraints: '1 <= s.length <= 300 · 1 <= wordDict.length <= 1000 · s and every dictionary word use lowercase English letters only',
+    fn: 'wordBreak',
+    kind: 'plain',
+    normalize: 'none',
+    starterCode: `// wordBreak(s, wordDict) -> true when s splits fully into dictionary words
+function wordBreak(s, wordDict) {
+  // TODO: mark which prefixes of s can already be split, then extend them
+}`,
+    hints: [
+      'Think in terms of positions in the string. What does it mean for the prefix ending at a position to be already solvable?',
+      'Let reachable[i] mean the first i characters can be split. From a reachable position, jump ahead by any dictionary word that matches there and mark the landing position.',
+    ],
+    explanation: 'We track which prefixes of the string can already be formed from dictionary words. The empty prefix needs no words, so it starts as reachable. From any reachable position we try every dictionary word: when the word matches the string at that position, the position just past the word becomes reachable as well. If the position at the very end of the string becomes reachable, a complete split exists; otherwise some part of the string can never be covered and the answer is false.',
+    complexity: 'Time O(n * w) · Space O(n)',
+    solutionCode: `function wordBreak(s, wordDict) {
+  const words = new Set(wordDict);
+  const reachable = new Array(s.length + 1).fill(false);
+  reachable[0] = true;
+  for (let i = 0; i < s.length; i++) {
+    if (!reachable[i]) continue;
+    for (const word of words) {
+      if (s.startsWith(word, i)) reachable[i + word.length] = true;
+    }
+  }
+  return reachable[s.length];
+}`,
+    visibleTests: [
+      { args: ["leetcode", ["leet", "code"]], expected: true },
+      { args: ["catsandog", ["cats", "dog", "sand", "and", "cat"]], expected: false },
+    ],
+    hiddenTests: [
+      { args: ["applepenapple", ["apple", "pen"]], expected: true },
+      { args: ["aaaaaaa", ["aaaa", "aaa"]], expected: true },
+      { args: ["abcd", ["a", "b", "cd"]], expected: true },
+      { args: ["abc", ["ab", "d"]], expected: false },
+      { args: ["aa", ["a"]], expected: true },
+      { args: ["pineapplepenapple", ["apple", "pen", "applepen", "pine", "pineapple"]], expected: true },
+    ],
+  },
+  {
+    id: 'longest-common-subsequence',
+    topic: 'dp',
+    title: 'Longest Common Subsequence',
+    difficulty: 'Medium',
+    statement: 'Given two strings, find the length of their longest common subsequence and return that length. A subsequence is formed by deleting zero or more characters without changing the order of what remains, and the chosen characters must appear in the same relative order inside both strings.',
+    examples: [
+      { input: 'text1 = "abcde", text2 = "ace"', output: '3', explanation: 'The subsequence ace appears in order inside both strings and nothing longer fits.' },
+      { input: 'text1 = "abc", text2 = "abc"', output: '3', explanation: 'Identical strings share the whole string as a common subsequence.' },
+    ],
+    constraints: '1 <= text1.length, text2.length <= 1000 · both strings use lowercase English letters only',
+    fn: 'lcs',
+    kind: 'plain',
+    normalize: 'none',
+    starterCode: `// lcs(text1, text2) -> length of the longest subsequence common to both strings
+function lcs(text1, text2) {
+  // TODO: compare prefixes of the two strings and reuse smaller answers
+}`,
+    hints: [
+      'Look at the last characters of both prefixes. How does the answer change when those two characters match, and when they differ?',
+      'When the last characters match, take one plus the answer for both shorter prefixes. Otherwise drop the last character from one string and keep the better of the two options.',
+    ],
+    explanation: 'We build answers for every pair of prefixes. If the current last characters of the two prefixes are equal, that character can extend the best common subsequence of the shorter prefixes by one. If they differ, the longest answer either ignores the last character of the first string or ignores the last character of the second string, so we keep the larger of those two previously computed answers. Filling the table from short prefixes to longer ones guarantees every smaller answer is ready when needed, and the corner cell holds the length for the full strings.',
+    complexity: 'Time O(m * n) · Space O(n)',
+    solutionCode: `function lcs(text1, text2) {
+  const n = text2.length;
+  let prev = new Array(n + 1).fill(0);
+  let curr = new Array(n + 1).fill(0);
+  for (let i = 1; i <= text1.length; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (text1[i - 1] === text2[j - 1]) curr[j] = prev[j - 1] + 1;
+      else curr[j] = Math.max(prev[j], curr[j - 1]);
+    }
+    const swap = prev;
+    prev = curr;
+    curr = swap;
+    curr.fill(0);
+  }
+  return prev[n];
+}`,
+    visibleTests: [
+      { args: ["abcde", "ace"], expected: 3 },
+      { args: ["abc", "abc"], expected: 3 },
+    ],
+    hiddenTests: [
+      { args: ["abcd", "acbd"], expected: 3 },
+      { args: ["aaaa", "aa"], expected: 2 },
+      { args: ["a", "b"], expected: 0 },
+      { args: ["hello", "hallo"], expected: 4 },
+      { args: ["xyz", "xyz"], expected: 3 },
+    ],
+  },
+  {
+    id: 'unique-paths',
+    topic: 'dp',
+    title: 'Unique Paths',
+    difficulty: 'Medium',
+    statement: 'A robot stands at the top-left cell of a grid with m rows and n columns and wants to reach the bottom-right cell. From any cell the robot may move only one step down or one step right. Count how many different routes the robot can take and return that count.',
+    examples: [
+      { input: 'm = 3, n = 7', output: '28', explanation: 'The trip needs two down moves and six right moves in some order, and the distinct orders of those moves give 28 routes.' },
+      { input: 'm = 3, n = 2', output: '3', explanation: 'The routes are right-down-down, down-right-down and down-down-right.' },
+    ],
+    constraints: '1 <= m, n <= 100 · tested grids keep the route count inside a signed 32-bit integer',
+    fn: 'uniquePaths',
+    kind: 'plain',
+    normalize: 'none',
+    starterCode: `// uniquePaths(m, n) -> number of down/right-only routes across an m by n grid
+function uniquePaths(m, n) {
+  // TODO: the routes into a cell come from the cell above and the cell on its left
+}`,
+    hints: [
+      'How many ways can the robot enter a given cell? It must have come from exactly one of two neighbouring cells.',
+      'Every cell in the first row and first column has exactly one incoming route. For other cells, add the counts of the cell above and the cell to the left.',
+    ],
+    explanation: 'The robot can only arrive at a cell from above or from the left, so the number of routes into a cell equals the routes into the cell above plus the routes into the cell to its left. Cells on the first row or first column can be reached in exactly one way, since only one direction of travel ever leads into them. Filling the grid row by row means both neighbours of each cell are already counted when the cell is processed, and the count stored at the bottom-right cell is the total number of routes. Only one previous row is needed, so the table collapses to a single rolling row.',
+    complexity: 'Time O(m * n) · Space O(n)',
+    solutionCode: `function uniquePaths(m, n) {
+  const row = new Array(n).fill(1);
+  for (let i = 1; i < m; i++) {
+    for (let j = 1; j < n; j++) {
+      row[j] = row[j] + row[j - 1];
+    }
+  }
+  return row[n - 1];
+}`,
+    visibleTests: [
+      { args: [3, 7], expected: 28 },
+      { args: [3, 2], expected: 3 },
+    ],
+    hiddenTests: [
+      { args: [1, 1], expected: 1 },
+      { args: [1, 5], expected: 1 },
+      { args: [5, 1], expected: 1 },
+      { args: [2, 2], expected: 2 },
+      { args: [3, 3], expected: 6 },
+      { args: [4, 4], expected: 20 },
+    ],
+  },
 ];
 
 export const getProblem = (id) => PROBLEMS.find((p) => p.id === id);

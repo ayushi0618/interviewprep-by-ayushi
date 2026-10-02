@@ -20,7 +20,7 @@ const TYPE_ICON = {
   task: '✍️',
 };
 
-// Difficulty meta on problem rows gets the LeetCode-coloured chip.
+// Difficulty meta on problem rows gets the lavender / amber / rose chip.
 function diffClass(meta) {
   if (meta === 'Easy') return 'diff-easy';
   if (meta === 'Medium') return 'diff-medium';
@@ -35,9 +35,9 @@ function ProgressRing({ done, total }) {
   return (
     <span className="relative grid place-items-center w-11 h-11 shrink-0" title={`${done} of ${total} done`}>
       <svg viewBox="0 0 36 36" className="w-11 h-11 -rotate-90">
-        <circle cx="18" cy="18" r="15.5" fill="none" stroke="#daeee0" strokeWidth="3.5" />
+        <circle cx="18" cy="18" r="15.5" fill="none" stroke="#ECE8F9" strokeWidth="3.5" />
         <circle
-          cx="18" cy="18" r="15.5" fill="none" stroke="#308d46" strokeWidth="3.5" strokeLinecap="round"
+          cx="18" cy="18" r="15.5" fill="none" stroke="#7C6BD9" strokeWidth="3.5" strokeLinecap="round"
           strokeDasharray={`${pct * C} ${C}`}
           className="transition-all duration-500"
         />

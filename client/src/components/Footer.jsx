@@ -1,9 +1,9 @@
 import { TOPICS } from '../content/topics';
 import Logo from './Logo';
 
-// Site footer — real prep-site shape: brand + columns (Topics, Practice,
-// About). Rendered on every page by App.jsx.
-export default function Footer({ onNotes, onSheet, onPlans, onMock, onPlayground }) {
+// Site footer — brand + columns (Topics, Practice, About). Rendered on
+// every page by App.jsx.
+export default function Footer({ onNotes, onSheet, onPlans, onMock, onPlayground, onProblems, onRoadmap }) {
   const link = 'block text-sm text-brand-100/80 hover:text-white transition py-0.5 text-left';
   return (
     <footer className="bg-brand-900 text-white mt-auto">
@@ -34,8 +34,10 @@ export default function Footer({ onNotes, onSheet, onPlans, onMock, onPlayground
         <nav aria-label="Practice">
           <p className="text-xs font-extrabold tracking-widest text-brand-300">PRACTICE</p>
           <div className="mt-3">
-            <button className={link} onClick={onSheet}>🧩 DSA Sheet</button>
-            <button className={link} onClick={onPlans}>📋 Study Plans</button>
+            {onProblems && <button className={link} onClick={onProblems}>🧩 Problems</button>}
+            {onRoadmap && <button className={link} onClick={onRoadmap}>🗺️ Roadmap</button>}
+            <button className={link} onClick={onSheet}>📋 DSA Sheet</button>
+            <button className={link} onClick={onPlans}>🎯 Study Plans</button>
             <button className={link} onClick={() => onMock()}>🎤 Mock Interview</button>
             <button className={link} onClick={onPlayground}>▶ Run Code</button>
             <button className={link} onClick={() => onNotes('mock-bank')}>🎤 Full Mock Bank</button>

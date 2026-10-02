@@ -9,7 +9,11 @@
    --------------------------------------------------------------- */
 
 html { scroll-behavior: smooth; }
-body { @apply bg-[#f6f7f4] text-ink font-sans antialiased; }
+body { @apply bg-[#FCFAFF] text-ink font-sans antialiased; }
+/* Reserve space for the fixed mobile bottom nav */
+@media (max-width: 1023px) {
+  body { padding-bottom: 3.75rem; }
+}
 
 .article-body {
   @apply text-[1.05rem] leading-[1.85] text-slate-800;
@@ -83,9 +87,9 @@ body { @apply bg-[#f6f7f4] text-ink font-sans antialiased; }
 .callout .callout-title { @apply font-bold mb-1.5 text-[0.95rem]; }
 .callout p { @apply my-1.5; }
 .callout.note { @apply bg-sky-50 border-sky-500 text-sky-950; }
-.callout.tip { @apply bg-emerald-50 border-emerald-500 text-emerald-950; }
+.callout.tip { @apply bg-brand-50 border-brand-500 text-brand-900; }
 .callout.important { @apply bg-amber-50 border-amber-500 text-amber-950; }
-.callout.warning { @apply bg-red-50 border-red-500 text-red-950; }
+.callout.warning { @apply bg-rose-50 border-rose-500 text-rose-950; }
 
 /* collapsible answers */
 .article-body details {
@@ -105,8 +109,8 @@ body { @apply bg-[#f6f7f4] text-ink font-sans antialiased; }
 
 /* ---------------------------------------------------------------
    Shared UI primitives — one button/chip/card system for every
-   page (home, sheet, plans, problem, playground). Difficulty chips
-   use LeetCode's colours so the coding pages feel familiar.
+   page (home, sheet, plans, problem, playground). Difficulty chips:
+   Easy → lavender, Medium → amber, Hard → rose.
    --------------------------------------------------------------- */
 .btn-primary {
   @apply inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 py-2.5 font-bold text-white shadow-card transition hover:bg-brand-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
@@ -120,11 +124,11 @@ body { @apply bg-[#f6f7f4] text-ink font-sans antialiased; }
 .diff-easy, .diff-medium, .diff-hard {
   @apply inline-flex items-center rounded-full border px-2 py-0.5 text-[0.7rem] font-bold leading-none;
 }
-.diff-easy { background: #e7f8f4; color: #07856f; border-color: #b5ead9; }
+.diff-easy { background: #ECE8F9; color: #5744A8; border-color: #D9D1F2; }
 .diff-medium { background: #fff6e0; color: #9a6a00; border-color: #ffe1a1; }
 .diff-hard { background: #ffeef1; color: #d81f4b; border-color: #ffc2d1; }
 
-::selection { background: #b6dec2; }
+::selection { background: #D9D1F2; }
 
 /* thin scrollbars for sidebar */
 .nice-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
