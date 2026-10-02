@@ -59,6 +59,13 @@ SELECT COUNT(DISTINCT city) FROM employees;          -- "how many different citi
 > [!TIP]
 > `COUNT(*)` counts rows, `COUNT(col)` counts non-NULL values, `COUNT(DISTINCT col)` counts unique non-NULL values. Interviewers love this trio.
 
+Try it live — this playground runs on a `students(id, name, city, course, marks)` table, so write against exactly those columns:
+
+```sql-playground SQL playground: filter and sort students
+SELECT name, marks FROM students WHERE marks >= 80 ORDER BY marks DESC;
+-- Try next: change 80 to 60, add AND course = 'CS', or sort ASC instead.
+```
+
 ---
 
 ## 🔗 3. JOINs — Combining Tables
@@ -87,6 +94,39 @@ LEFT JOIN departments d ON e.dept_id = d.id;    -- everyone, dept if any
 
 > [!TIP]
 > MySQL has no `FULL OUTER JOIN` — simulate with `LEFT JOIN ... UNION ... RIGHT JOIN ...`.
+
+### A JOIN, joined by hand (row by row)
+
+Don't memorise the table above — *watch* it happen. Take the two tiny tables from this section:
+
+employees: `(1, Ayushi, dept 10)`, `(2, Rahul, dept 20)`, `(3, Sneha, dept NULL)` — departments: `(10, Engineering)`, `(20, Design)`, `(30, Marketing)`.
+
+INNER JOIN walks each employee and keeps only exact matches:
+
+- Ayushi (dept 10) → finds Engineering → keep `Ayushi | Engineering` ✅
+- Rahul (dept 20) → finds Design → keep `Rahul | Design` ✅
+- Sneha (dept NULL) → NULL never equals anything → dropped ❌
+
+Result: exactly 2 rows. LEFT JOIN repeats the same walk but refuses to drop a left row:
+
+- Ayushi → Engineering ✅, Rahul → Design ✅, Sneha → no match, so keep her anyway with `Sneha | NULL` ✅
+
+Result: 3 rows. That single difference — "drop unmatched left rows vs keep them with NULLs" — *is* the INNER vs LEFT answer, and now you can re-derive it on any whiteboard instead of reciting it.
+
+> [!WARNING]
+> **Common mistake:** putting the right-table filter in `WHERE` after a LEFT JOIN (`WHERE d.dept_name = 'Engineering'`). That silently turns your LEFT JOIN back into an INNER JOIN, because the NULL rows fail the filter. Filter the right table inside the `ON` clause when you truly want to keep unmatched left rows.
+
+This playground runs on `students` only (the live DB has no second table), so it uses a subquery — the same "compare each row against an aggregate" idea a JOIN often replaces:
+
+```sql-playground SQL playground: students above the average
+SELECT name, marks FROM students
+WHERE marks > (SELECT AVG(marks) FROM students)
+ORDER BY marks DESC;
+-- TODO: also show students above the average in their own course.
+-- Hint: correlate the inner query with the outer row's course.
+```
+
+---
 
 ---
 
@@ -124,6 +164,27 @@ GROUP BY dept_id HAVING AVG(salary) > 60000;
 
 🎤 What the interviewer actually asks: "Can I put `AVG(salary) > 60000` in WHERE?" — No. Groups don't exist yet at WHERE time.
 
+### GROUP BY + HAVING, traced on five rows
+
+Watch the pipeline instead of memorising the slogan. Employees `(Engineering, 80k)`, `(Engineering, 60k)`, `(Design, 50k)`, `(Design, 40k)`, `(HR, 90k)`, query: average salary per department, only departments averaging above 55k.
+
+First, WHERE would run (none here, so all 5 rows pass). Then GROUP BY bundles them: Engineering `{80k, 60k}`, Design `{50k, 40k}`, HR `{90k}`. Aggregates collapse each bundle to one row: Engineering → 70k, Design → 45k, HR → 90k. Only now does HAVING look at those *finished groups* and keep Engineering (70k) and HR (90k), dropping Design (45k). SELECT finally shows `dept, avg_salary`.
+
+If you had written that 55k condition in WHERE, the database would ask "is *this individual salary* above the department average?" — a question that doesn't exist yet, because no average has been computed. That's the failure, in plain words.
+
+```sql-playground SQL playground: average marks per course
+SELECT course, AVG(marks) AS avg_marks, COUNT(*) AS students_count
+FROM students
+GROUP BY course
+HAVING AVG(marks) >= 70
+ORDER BY avg_marks DESC;
+-- TODO: change the HAVING threshold, then try COUNT(*) >= 3
+-- to keep only courses with at least 3 students.
+```
+
+> [!WARNING]
+> **Common mistake:** selecting a bare column that is neither grouped nor aggregated (`SELECT name, AVG(marks) ... GROUP BY course`). Which name would it show for a 30-student course? There is no honest answer, so strict databases error — group by every non-aggregated column you select.
+
 ## 🕳️ 5. Subqueries & DISTINCT
 
 ```sql
@@ -140,6 +201,28 @@ WHERE dept_id IN (SELECT id FROM departments WHERE city = 'Delhi');
 
 > [!TIP]
 > Most subqueries can be rewritten as JOINs (usually faster), but in interviews a correct subquery beats a broken JOIN.
+
+### Same answer, two ways — subquery vs JOIN
+
+Goal: names of employees who work in a Delhi department. Subquery way — ask for the Delhi department ids first, then filter employees against that list:
+
+```sql
+SELECT name FROM employees
+WHERE dept_id IN (SELECT id FROM departments WHERE city = 'Delhi');
+```
+
+JOIN way — glue the tables together, then filter the combined rows:
+
+```sql
+SELECT e.name FROM employees e
+JOIN departments d ON e.dept_id = d.id
+WHERE d.city = 'Delhi';
+```
+
+Both return the identical names. The subquery reads like the English ("employees whose dept is in the Delhi list"); the JOIN reads like the mechanism ("combine, then filter") and usually scales better because the database can use indexes and join ordering. In an interview, write whichever you can write *correctly* first, then say "this could also be written as a JOIN" — naming the alternative is the senior signal.
+
+> [!NOTE]
+> **Under the hood:** modern optimisers often rewrite an `IN` subquery into a join internally anyway. Your job is clarity; the engine's job is the execution plan. Never claim one is *always* faster — say "usually the JOIN, and I'd check with EXPLAIN."
 
 ---
 
@@ -278,6 +361,45 @@ CREATE INDEX idx_emp_dept ON employees(dept_id);
 > [!NOTE]
 > **One-line interview answer:** "An index trades write speed and disk space for much faster reads. The primary key gets a unique index automatically."
 
+### Why an index is fast — the B-tree in plain words
+
+Without an index, finding `dept_id = 20` means reading every row top to bottom (a full table scan) — like reading a whole textbook to find one mention of "photosynthesis." An index is the book's back index: entries sorted alphabetically, each pointing to a page. Sorted order is the entire trick — the database can binary-search instead of scanning.
+
+That sorted structure is usually a **B-tree**: a shallow, wide tree where each node holds many sorted keys and points to the next level. With a million rows, a B-tree is only about 3–4 levels deep, so a lookup touches 3–4 pages instead of a million rows. That's the honest "why" behind "indexes make queries fast" — logarithmic hops versus a linear walk.
+
+> [!NOTE]
+> **Under the hood:** an index stores the indexed column(s) plus a pointer to the full row. A query that needs only indexed columns can answer from the index alone (a "covering index") and never touch the table at all — that's the fastest read a relational database can do.
+
+> [!WARNING]
+> **Common mistake:** indexing every column "for performance." Each index is a second sorted structure the database must maintain on every write, so inserts get steadily slower and the disk fills with redundant trees. Index what your WHERE, JOIN, and ORDER BY actually use.
+
+## 🔒 6B. Transactions & ACID — all or nothing
+
+A transaction bundles several statements so they succeed or fail *together*. Trace a ₹500 transfer from account A (₹2,000) to account B (₹1,000):
+
+```sql
+BEGIN;
+UPDATE accounts SET balance = balance - 500 WHERE id = 'A';  -- A: 1500
+UPDATE accounts SET balance = balance + 500 WHERE id = 'B';  -- B: 1500
+COMMIT;  -- both changes become permanent at once
+```
+
+If the server crashes *between* the two updates and you had no transaction, ₹500 vanishes — A is debited, B never credited. With a transaction, the crash triggers a rollback: both updates undo, balances return to 2000/1000, as if nothing happened. That all-or-nothing promise is **Atomicity**. The other three letters, one line each: **Consistency** (the database never lands in an invalid state — totals and constraints still hold), **Isolation** (concurrent transfers don't read each other's half-finished state), **Durability** (after COMMIT, the result survives a crash — it's written to durable log/storage).
+
+Say it like this: "I wrap multi-step writes in a transaction so a failure mid-way rolls everything back — the database is never left half-updated."
+
+## 🪟 6C. Window Functions — rank without collapsing rows
+
+GROUP BY collapses each group into one row; a window function keeps every row and *adds* a computed column. Simplest useful case: number students within each course by marks.
+
+```sql
+SELECT name, course, marks,
+  ROW_NUMBER() OVER (PARTITION BY course ORDER BY marks DESC) AS rank_in_course
+FROM students;
+```
+
+`PARTITION BY course` restarts the numbering per course; `ORDER BY marks DESC` puts the topper at 1. The output has the same row count as the input — you can now filter `WHERE rank_in_course <= 3` for "top 3 per course," a classic interview favourite that GROUP BY alone cannot express. Reach for window functions when the question says "per group, but keep the individual rows."
+
 
 ## 🧱 7. Normalization Recap
 
@@ -291,6 +413,21 @@ Normalization = storing each fact **once**, so data can't contradict itself.
 
 > [!IMPORTANT]
 > Normalization kills redundancy but costs JOINs. Real systems sometimes **denormalise** deliberately for read speed — name it as a trade-off, not a mistake.
+
+Worked fix, thirty seconds: a single table `orders(order_id, customer_name, customer_city, product, price)` stores Ayushi's name and city on *every* order — update her city once, miss one row, and the data contradicts itself. Normalising splits it into `customers(id, name, city)` and `orders(id, customer_id, product, price)`: the city now lives in exactly one row, and orders reach it by foreign key. You traded one table for two plus a JOIN — and bought the guarantee that a fact can never disagree with itself. That trade-off sentence is the whole normalization answer at fresher depth.
+
+```sql
+-- Before (city repeated on every order row):
+-- orders: (1, 'Ayushi', 'Ghaziabad', 'Keyboard', 1999)
+--         (2, 'Ayushi', 'Ghaziabad', 'Mouse',     799)
+
+-- After (each fact stored once):
+-- customers: (7, 'Ayushi', 'Ghaziabad')
+-- orders:    (1, 7, 'Keyboard', 1999)
+--            (2, 7, 'Mouse',     799)
+SELECT o.id, c.name, c.city, o.product
+FROM orders o JOIN customers c ON c.id = o.customer_id;
+```
 
 ## 🏷️ 8. Naming Trap: SQL vs MySQL
 

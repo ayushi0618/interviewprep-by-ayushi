@@ -23,6 +23,25 @@ Big-O tells you **how your runtime (or memory) grows as input size `n` grows** �
 > [!TIP]
 > 🧠 **Quick mental shortcut:** count the loops. One loop over `n` → `O(n)`. A loop inside a loop → `O(n²)`. A loop that **halves** the problem each time → `O(log n)`. Sorting first and then one pass → `O(n log n)` (sorting dominates).
 
+### Growth with real numbers (this is what "fast" really means)
+
+Formulas feel abstract until you put numbers in. Roughly how many steps does each shape take?
+
+| Complexity | n = 10 | n = 100 | n = 1,000 | What it feels like |
+|---|---|---|---|---|
+| O(1) | 1 | 1 | 1 | Instant, always |
+| O(log n) | ~3 | ~7 | ~10 | Barely grows — doubling n adds about 1 step |
+| O(n) | 10 | 100 | 1,000 | Grows in a straight line |
+| O(n log n) | ~33 | ~664 | ~9,970 | A little above linear — still fine |
+| O(n²) | 100 | 10,000 | 1,000,000 | Fine small, painful at 1,000, dead at 100,000 |
+| O(2ⁿ) | 1,024 | ~10³⁰ | hopeless | Already broken before n = 50 |
+
+Read the O(2ⁿ) row slowly: at n = 100 it needs more steps than atoms you could ever count. That is why spotting exponential brute force (plain recursive Fibonacci is the classic) is an instant signal to look for DP.
+
+> [!WARNING]
+> **Common mistake:** quoting the complexity of the *code you wrote* instead of the *work it does*. A single loop that calls a library sort inside it is not O(n) — it is O(n log n) per call, so O(n² log n) overall. Always ask what each line inside the loop secretly costs.
+
+
 ### 📌 Complexity Cheat Table — Common Data Structure Operations
 
 | Operation | Array | Linked List | Stack | Queue | Hash Map (avg) |
@@ -75,7 +94,48 @@ This one idea converts countless O(n²) brute forces into O(n).
 > [!WARNING]
 > ⚠️ Hashing kills *time* but costs *space*. Always mention the trade-off: "I'm using O(n) extra space to bring this from O(n²) down to O(n)." Saying this unprompted scores points.
 
+
+### What is a collision, in plain words?
+
+A hash function turns your key into a bucket number, like a coat-check ticket machine. *"Ayushi" → bucket 3. "Rahul" → bucket 7.* Lookup means: compute the bucket, jump straight there. No scanning.
+
+A **collision** is simply two keys getting the same ticket number. *"Ikra" also lands in bucket 3.* Now bucket 3 holds a small list, and lookup means scanning that little list to find the right key. A few collisions? Still fast. *Every* key in one bucket? That one bucket is now just a list, and lookup degrades to O(n) — the worst case from the table above. Good hash functions spread keys evenly so buckets stay tiny.
+
+### Traced example — Two Sum, one pass
+
+Array `[2, 7, 11, 15]`, target `9`. Rule: for each `x`, ask "have I already seen `target - x`?" Check **first**, store **second**.
+
+| Step | x | Need (9 − x) | Map before checking | What happens |
+|---|---|---|---|---|
+| i = 0 | 2 | 7 | empty | Not there → store 2 at index 0 |
+| i = 1 | 7 | 2 | {2 → 0} | Found! Return indices [0, 1] |
+| i = 2 | — | — | — | Never reached — we stopped early |
+
+> [!WARNING]
+> **Common mistake:** storing `x` in the map *before* checking for the complement. If `x` is exactly half the target (x = 5, target = 10), you would "find" the element paired with itself. Check first, store second — the order is the whole trick.
+
 **Practice:** Two Sum (approach above), Contains Duplicate (set lookup), Group Anagrams (sorted string as key), First Unique Character (frequency map).
+
+
+```playground Playground: two sum with a hash map
+// Two Sum: return the indices of the two numbers that add up to target.
+const nums = [2, 7, 11, 15];
+const target = 9;
+
+function twoSum(nums, target) {
+  const seen = new Map(); // value -> index
+  for (let i = 0; i < nums.length; i++) {
+    const need = target - nums[i];
+    // TODO: if `need` is already in seen, return [seen.get(need), i]
+    // TODO: otherwise store nums[i] with its index, then keep going
+  }
+  return [];
+}
+
+console.log(twoSum(nums, target)); // expect [0, 1]
+console.log(twoSum([3, 2, 4], 6)); // expect [1, 2]
+```
+
 
 ---
 
@@ -85,10 +145,27 @@ This one idea converts countless O(n²) brute forces into O(n).
 
 **How it works:** Put one pointer at the start (`left`) and one at the end (`right`). Compare, then move the pointer that makes progress toward the answer. Because they only move toward each other, the whole thing is O(n) after sorting.
 
+```visual two-pointers
+```
+
+
 **Tiny example — Two Sum II (sorted array):** Sum too small → move `left` up (bigger numbers). Sum too big → move `right` down. No map needed, O(1) space.
 
 > [!TIP]
 > Two pointers has a second flavor: **fast & slow pointers** (both start at the left, moving at different speeds) — used for cycle detection and finding middles in linked lists (Section 8).
+
+
+### Traced example — find the pair that sums to 17
+
+Sorted array `[2, 5, 8, 12]`, target `17`. Watch the pointers walk toward each other:
+
+| Step | left (value) | right (value) | Sum | Decision |
+|---|---|---|---|---|
+| Start | index 0 → 2 | index 3 → 12 | 14 | Too small → only a bigger left value can help, move `left` up |
+| Next | index 1 → 5 | index 3 → 12 | 17 | Equal — found the pair at indices 1 and 3 |
+
+> [!WARNING]
+> **Common mistake:** reaching for two pointers on an **unsorted** array. The move rules ("sum too small, move left up") only work because bigger values reliably live on the right. Unsorted, moving a pointer can throw away the answer. Sort first (O(n log n)) or use the hash map from Section 3.
 
 **Practice:** Valid Palindrome (left/right meet in middle, skip non-letters), Container With Most Water (move the shorter side inward — moving the taller one can never help).
 
@@ -103,12 +180,64 @@ This one idea converts countless O(n²) brute forces into O(n).
 | **Fixed window** | Window size `k` never changes; slide it one step at a time, add the new element, remove the old | Maximum sum subarray of size k |
 | **Variable window** | Expand `right` to include more; when the window becomes *invalid*, shrink from `left` until valid again | Longest substring without repeating characters |
 
+```visual sliding-window
+```
+
+
 **🔍 Longest substring idea:** Keep a window `[left, right]` and a set of characters inside it. Expand `right`; if the new char is already in the set, keep removing from `left` until it's gone. Track the max window size. Every character enters and leaves once → O(n), not O(n²).
+
+
+### Traced example — variable window on `"abca"`
+
+Goal: longest substring with no repeating character. The window is whatever sits between `left` and `right`.
+
+| right lands on | Window now | Valid? | Action before moving on | Best so far |
+|---|---|---|---|---|
+| a (index 0) | `a` | Yes | — | 1 |
+| b (index 1) | `ab` | Yes | — | 2 |
+| c (index 2) | `abc` | Yes | — | 3 |
+| a (index 3) | `abca` | No — `a` repeats | Shrink from left: drop the old `a`, window becomes `bca` | 3 |
+
+### Traced example — fixed window sums
+
+Array `[2, 1, 5, 1, 3, 2]`, window size k = 3, find the maximum window sum. Never re-add the whole window — subtract what leaves, add what enters.
+
+| Window | Sum | How we got it |
+|---|---|---|
+| [2, 1, 5] | 8 | First window: add all three |
+| [1, 5, 1] | 7 | 8 − 2 (left) + 1 (entered) |
+| [5, 1, 3] | 9 | 7 − 1 + 3 |
+| [1, 3, 2] | 8 | 9 − 5 + 2 |
+
+> [!WARNING]
+> **Common mistake:** in a variable window, updating your best answer *before* shrinking back to valid. The invalid window (like `abca` above) must never be recorded. Shrink first, measure second.
 
 > [!IMPORTANT]
 > Sliding window works because the answer is **contiguous** and shrinking the window is *safe* (monotonic). The moment a problem allows non-contiguous picks, or "shrinking" can destroy a good answer, it's not sliding window — that's your cue to think DP or greedy instead.
 
 **Practice:** Maximum Average Subarray I (fixed window), Longest Substring Without Repeating Characters (variable window), Minimum Window Substring (variable, harder — the boss level).
+
+
+```playground Playground: max sum window of size k
+// Maximum sum of any contiguous window of size k. Slide, don't re-add.
+const nums = [2, 1, 5, 1, 3, 2];
+const k = 3;
+
+function maxWindowSum(nums, k) {
+  let windowSum = 0;
+  // TODO: add up the first k numbers into windowSum
+  let best = windowSum;
+  for (let i = k; i < nums.length; i++) {
+    // TODO: slide — subtract nums[i - k] (leaving), add nums[i] (entering)
+    console.log("window ending at", i, "sum =", windowSum); // trace each slide
+    // TODO: update best if windowSum is bigger
+  }
+  return best;
+}
+
+console.log("answer:", maxWindowSum(nums, k)); // expect 9
+```
+
 
 ---
 
@@ -127,6 +256,24 @@ You rarely implement sorting in interviews, but you **must** know the complexity
 > [!NOTE]
 > 📌 **When is merge sort preferred?** Three cases: (1) you need a **guaranteed** O(n log n) worst case, (2) you need a **stable** sort (equal items keep their order), and (3) sorting **linked lists** (merging needs no random access) or huge data that doesn't fit in memory (external sorting). Quick sort is usually faster in practice due to cache-friendliness — that's why most built-in sorts are quicksort hybrids. Insertion sort wins on tiny or nearly-sorted arrays.
 
+
+```visual sorting
+```
+
+### Worked example — sorting as the setup step
+
+Merge Intervals on `[[1, 3], [2, 6], [8, 10]]`. The intervals look messy until you sort by start time; then overlaps are forced to sit next to each other.
+
+| Step | Current interval | Merged list so far | What happens |
+|---|---|---|---|
+| Sorted input | [1, 3] | — | Sorting by start gives [1,3], [2,6], [8,10] |
+| Take [1, 3] | [1, 3] | [1, 3] | First one goes in as-is |
+| Take [2, 6] | [2, 6] | [1, 6] | 2 starts before 3 ends → overlap → stretch the end to 6 |
+| Take [8, 10] | [8, 10] | [1, 6], [8, 10] | 8 starts after 6 → no overlap → new entry |
+
+> [!WARNING]
+> **Common mistake:** assuming the built-in sort is free or magic. Sorting numbers with a default string sort (JavaScript's classic trap) turns `[10, 9, 80]` into `[10, 80, 9]`. Always pass a numeric comparator — `sort((a, b) => a - b)` — and always count the O(n log n) in your complexity answer.
+
 **Practice:** Sort Colors (Dutch national flag — counting/pointers), Merge Intervals (sort by start, then merge — sorting as a *setup step* is the real lesson).
 
 ---
@@ -142,6 +289,10 @@ You rarely implement sorting in interviews, but you **must** know the complexity
 
 **Template idea:** Keep `lo` and `hi` as the range where the answer *could* be. While `lo < hi`: compute `mid = lo + (hi - lo) / 2` (this form avoids integer overflow), test the condition at `mid`, and throw away the half that can't contain the answer.
 
+```visual binary-search
+```
+
+
 ```mermaid
 flowchart TD
     A["Start: lo = 0, hi = n - 1<br/>(answer is somewhere in here)"] --> B{"lo ≤ hi ?"}
@@ -156,7 +307,46 @@ flowchart TD
     H --> B
 ```
 
+
+### Traced example — hunting for 23
+
+Array `[3, 7, 11, 15, 23, 29, 35]` (indices 0–6), target `23`. One column per question: where can the answer still be, what is in the middle, and which half dies?
+
+| Step | lo | hi | mid | arr[mid] | Comparison | New range |
+|---|---|---|---|---|---|---|
+| Start | 0 | 6 | 3 | 15 | 15 < 23 → answer is right | lo = 4 |
+| Next | 4 | 6 | 5 | 29 | 29 > 23 → answer is left | hi = 4 |
+| Next | 4 | 4 | 4 | 23 | Equal — found at index 4 | Done |
+
+> [!NOTE]
+> **Under the hood:** `mid = lo + (hi - lo) / 2` instead of `(lo + hi) / 2` — in languages like Java or C++, `lo + hi` can overflow the integer limit when both are huge, giving a negative mid and a crash. One line to remember: **mid = lo + (hi − lo) / 2, never (lo + hi) / 2**.
+
+> [!WARNING]
+> **Common mistake:** writing `lo = mid` instead of `lo = mid + 1` when the answer must be to the right. Since `mid` itself was already checked and rejected, keeping it in range can loop forever on a two-element range. The pointer must always move *past* mid.
+
 **Practice:** Binary Search (the template itself), Search Insert Position / First Bad Version (monotonic yes→no flip), Find Minimum in Rotated Sorted Array (compare mid with right end).
+
+
+```playground Playground: binary search by hand
+// Find target in a sorted array. The console.log IS the lesson — watch lo/hi shrink.
+const arr = [3, 7, 11, 15, 23, 29, 35];
+const target = 23;
+
+function binarySearch(arr, target) {
+  let lo = 0;
+  let hi = arr.length - 1;
+  // TODO: while lo <= hi:
+  //   mid = lo + Math.floor((hi - lo) / 2)
+  //   console.log("lo", lo, "hi", hi, "mid", mid, "value", arr[mid]);
+  //   if arr[mid] === target, return mid
+  //   if arr[mid] < target, search right (lo = mid + 1), else search left (hi = mid - 1)
+  return -1;
+}
+
+console.log("found at index:", binarySearch(arr, target)); // expect 4
+console.log("missing gives:", binarySearch(arr, 8)); // expect -1
+```
+
 
 ---
 
@@ -236,6 +426,23 @@ A graph is nodes (vertices) connected by edges. For coding interviews, store it 
 > [!WARNING]
 > ⚠️ Graphs have cycles, so **both** BFS and DFS need a `visited` set. Forgetting it = infinite loop. In 4 out of 5 graph interview bugs, this is the bug. Trees don't need it (no cycles); graphs always do.
 
+
+### Traced example — BFS queue on a tiny 6-node graph
+
+Edges: A–B, A–C, B–D, C–E, D–F, E–F. Start BFS at A. The queue is the star of this table — nodes wait their turn in the order they were discovered.
+
+| Step | Take from front | New neighbours added | Queue after | Visited order so far |
+|---|---|---|---|---|
+| Start | — | A goes in | [A] | — |
+| Visit A | A | B, C | [B, C] | A |
+| Visit B | B | D | [C, D] | A, B |
+| Visit C | C | E | [D, E] | A, B, C |
+| Visit D | D | F | [E, F] | A, B, C, D |
+| Visit E | E | F — already discovered, skip | [F] | A, B, C, D, E |
+| Visit F | F | none new | empty | A, B, C, D, E, F |
+
+Two things to say out loud from this trace: F was discovered from D (distance 3: A→B→D→F) before E ever got its turn, and *visited when added to the queue*, not when removed — otherwise F would be added twice. Because the queue is first-in-first-out, nodes are always visited in increasing distance from A. That is the whole shortest-path argument.
+
 **Practice:** Number of Islands (grid DFS/BFS flood fill — the most-asked fresher graph problem), Clone Graph or Course Schedule basics if you're feeling strong.
 
 ---
@@ -248,8 +455,29 @@ Every recursive solution needs two parts:
 
 **🔍 Subsets idea (backtracking in 2 lines):** For each element, branch twice — *take it* or *skip it* — and recurse; when you run out of elements, record the current selection. Backtracking = recursion + "undo the choice" after exploring it, so the next branch starts clean.
 
+```visual recursion-tree
+```
+
+
 > [!NOTE]
 > 🧠 Debugging recursion: draw the **call tree** on paper for a tiny input (n = 3). If you can't trace it small, you don't understand it yet. Interviewers love candidates who sketch the tree before coding.
+
+
+### Call-stack walkthrough — `fact(3)`
+
+Recursion is the computer keeping a stack of paused calls. Trace `fact(3)` (3 × `fact(2)`, base case `fact(1)` returns 1) as frames being pushed and popped:
+
+| Moment | Call stack (bottom → top) | What is happening |
+|---|---|---|
+| Call fact(3) | fact(3) | Needs fact(2) before it can multiply — pauses |
+| Call fact(2) | fact(3), fact(2) | Needs fact(1) — pauses too |
+| Call fact(1) | fact(3), fact(2), fact(1) | Base case — returns 1 immediately |
+| fact(1) pops | fact(3), fact(2) | fact(2) resumes: 2 × 1 = 2, returns |
+| fact(2) pops | fact(3) | fact(3) resumes: 3 × 2 = 6, returns |
+| Stack empty | — | Final answer: 6 |
+
+> [!WARNING]
+> **Common mistake:** a missing or unreachable base case. Every call then pushes a new frame forever until the runtime kills the program with a stack overflow. Before writing the recursive case, write the base case and say out loud, "every call must move closer to this."
 
 **Practice:** Subsets (take/skip branching), Permutations (pick one, recurse on the rest), Fibonacci recursively (then notice the repeated work — perfect bridge to DP below).
 
@@ -280,6 +508,24 @@ flowchart TD
 
 > [!TIP]
 > 📌 **Memoization idea (top-down DP):** keep a notebook (array/map). Before computing `fib(n)`, check the notebook — if it's there, return it instantly. If not, compute, *write it down*, then return. Every subproblem is now solved exactly once: O(2ⁿ) becomes O(n). The bottom-up version ("tabulation") just fills the same notebook from smallest to largest with a loop.
+
+
+### Building the Fibonacci table, bottom-up
+
+Tabulation means filling the notebook from the smallest answer upward, so every value you need is already written when you reach for it.
+
+| i | dp[i] | How it was computed |
+|---|---|---|
+| 0 | 0 | Base case — given |
+| 1 | 1 | Base case — given |
+| 2 | 1 | dp[1] + dp[0] = 1 + 0 |
+| 3 | 2 | dp[2] + dp[1] = 1 + 1 |
+| 4 | 3 | dp[3] + dp[2] = 2 + 1 |
+| 5 | 5 | dp[4] + dp[3] = 3 + 2 |
+| 6 | 8 | dp[5] + dp[4] = 5 + 3 |
+
+> [!WARNING]
+> **Common mistake:** jumping to DP before you can write the plain recursion and point at the repeated subproblem. If the subproblems do not overlap, memoization buys nothing — and if you cannot name the state ("dp[i] means the answer for the first i items"), the table will come out wrong no matter how neat it looks.
 
 **3 classic beginner DP problems (in learning order):**
 1. **Climbing Stairs** — ways to reach step n = ways(n−1) + ways(n−2). It's Fibonacci wearing a hat.

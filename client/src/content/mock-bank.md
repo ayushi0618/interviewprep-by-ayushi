@@ -5,6 +5,10 @@
 
 ---
 
+## 🔴 Use this bank with the Live Interview room
+
+Use this page as the question source, and the site's two modes as the training loop: in **Practice mode**, rehearse one round at a time without pressure — say each answer out loud, then open the topic file and fix only what wobbled. In the **Live Interview room**, run the full 45-minute format below exactly as written, camera and mic on, no notes and no pausing — treat it like the real slot. After every Live run, score yourself with the rubric on this page, take the 1s and 2s back into Practice, then go Live again. Practice builds the answers; Live builds the nerve.
+
 ## 🕐 The format (45 minutes, like a real round)
 
 | Round | Time | From |
@@ -103,6 +107,29 @@ Your complete scripts are in [06-projects-and-hr.md](./06-projects-and-hr.md). I
 
 > [!NOTE]
 > **The rule for "I don't know":** never bluff. Say what you *do* know nearby, then "I'd verify this by…" — interviewers rate honest-and-close above confident-and-wrong, every single time.
+
+---
+
+## 🆘 Panic recovery — what to say when you blank
+
+Blanking for five seconds feels like a disaster. It isn't — silence and panic-apologies are what hurt you. Interviewers expect small pauses; what they judge is how you recover. Keep one of these three lines ready and say it calmly, exactly as written:
+
+- **Buy yourself time (use first, always works):** "Let me think about that for a second — I want to structure this properly." Then breathe, find your first point (definition, example, or step one), and start there. Five quiet seconds after this line reads as *thoughtful*, not stuck.
+- **You know the neighbourhood, not the exact answer:** "I haven't used that directly in a project, but here's what I do know around it…" Say the closest true thing you know — a related concept, where it appears, what problem it solves — then finish honestly. Nearby-and-true beats exact-and-invented every single time.
+- **Complete blank (the honest rescue):** "I'm not fully sure about that one. If I hit this in real work, my first step would be…" — then describe your actual first step: checking the docs, reproducing it small, or logging what the code receives. You have just answered a different, better question: *how does this person handle not knowing?* That's a question every team asks.
+
+> [!TIP]
+> After you recover, **stop**. Give the answer, land it, and let the interviewer move on. The fastest way to turn a small blank into a bad impression is over-explaining for two minutes to compensate. Recover, answer, stop — in that order.
+
+**After each Live run — the 5-minute debrief (do this while it's fresh):**
+
+- Write down every question where you blanked or rambled, word for word. No judging, just capture — memory rewrites the run kindly within an hour.
+- For each one, say the fixed 30-second version out loud *once*, right then. One clean repetition now beats ten panicked re-reads tomorrow.
+- Score honestly with the rubric above, then pick at most **three** fixes for your next Practice session. A list of twelve fixes means none of them get fixed.
+- Note one thing that went *well* too — a clean project story, a calm recovery. You are training confidence on evidence, not just hunting for flaws.
+
+Keep the debrief ruthless and short: five minutes, three fixes maximum, then close the file. Reviewing a mock for an hour teaches you less than running a second mock does.
+The next Live run is where the fix gets proven — not in your notes, out loud.
 
 ---
 

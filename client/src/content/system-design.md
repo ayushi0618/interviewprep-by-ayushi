@@ -23,6 +23,20 @@ Interviewers grade your **process**, not a perfect final diagram. Use the same f
 > [!NOTE]
 > **One-line interview answer:** "First I clarify the requirements and scale, then sketch the high-level components, and only then deep-dive into one core piece like ID generation or message delivery."
 
+### Capacity estimation without fear (small, real numbers)
+
+Interviewers don't want precision — they want to see you *bound* the problem. Use round numbers and say your assumptions out loud. For a fresher URL shortener, this is a complete, respectable estimate:
+
+```text
+Writes: 1,000 new links/day ≈ 1 link every ~90 seconds (trivial)
+Reads: 100× writes = 100,000 clicks/day ≈ 1–2 requests/second average
+Peak: assume 10× average → ~20 req/sec (one small server handles this easily)
+Storage: 1,000 links/day × 365 days × ~500 bytes ≈ 180 MB/year (tiny)
+Conclusion: this fits on ONE server + ONE database — we add cache/LB only if traffic grows
+```
+
+Three habits make any estimate sound senior: state the read/write ratio, convert "per day" into "per second" (that's what servers feel), and end with a *conclusion* about what the numbers let you skip. If your estimate shows one server is enough, proudly design one server — matching the design to the numbers is the skill being tested.
+
 🎤 What the interviewer actually asks: "Design a URL shortener." They are really asking: *can you break a vague problem into pieces and make sensible trade-offs?* The four steps above are the whole game at fresher level.
 
 ---
@@ -44,6 +58,11 @@ You only need seven boxes for almost every fresher design. One line each — tha
 > [!TIP]
 > Draw in this order: Client → Load Balancer → Servers → Cache/Database, with a Queue hanging off the server for slow work. If you can draw that and explain each arrow, you can survive most fresher design rounds.
 
+Each box also has a failure you should be able to name — interviewers test this right after the happy path. If the cache dies, answers get slower but stay correct (the database still has everything). If one app server dies, the load balancer routes around it *provided your servers are stateless* — the moment a server keeps sessions in its own memory, that promise breaks. If the database dies, you have a real outage — which is why replication exists, and why you save chat messages *before* delivering them. Naming what breaks, and what the user notices, is the difference between a diagram and a design.
+
+> [!NOTE]
+> **Under the hood:** "stateless server" means every request carries everything needed to serve it (usually a token), and nothing user-specific lives only in one machine's memory. That single property is what makes load balancing, auto-scaling, and surviving a dead server possible.
+
 ### SQL vs NoSQL — choosing at design time
 
 | Pick SQL when… | Pick NoSQL when… |
@@ -54,6 +73,8 @@ You only need seven boxes for almost every fresher design. One line each — tha
 
 > [!NOTE]
 > **One-line interview answer:** "I choose by data shape: fixed, relational, consistency-critical data goes to SQL; flexible, document-shaped data goes to NoSQL. When unsure for a fresher-scale app, I start with SQL — it's the safer default."
+
+Apply it to this file's two designs so the rule stops being abstract: the URL shortener's `short_code → long_url` pair is fixed-shape and relational by nature, so a tiny SQL table with a unique index on `short_code` is the natural home. Chat messages are single, self-contained documents (`sender, receiver, text, time`) that never need a JOIN to be useful, so a document store like MongoDB fits — but at fresher scale an SQL table answers the same queries, and saying "either works here, I'd pick by team familiarity" is more honest than brand loyalty. Interviewers are scoring the *reasoning order* — shape first, product second.
 
 🎤 What the interviewer actually asks: "SQL or NoSQL for this?" — Never answer with a brand name first. Answer with the data shape, then the name.
 
@@ -102,6 +123,14 @@ User clicks sho.rt/aB3xK9
 
 **One scaling note:** Because reads dominate, cache the hottest codes in Redis and let the database handle only cache misses. If writes ever grow, multiple app servers behind the load balancer share the same database — the app servers themselves stay stateless.
 
+### How to say it — minute by minute
+
+Minute 1 (clarify, don't draw yet): *"Before I design, three quick checks — should links expire or live forever? Roughly how many new links per day, and is it read-heavy? Do we need click analytics, or just redirects?"* You've shown product thinking before touching architecture.
+
+Minute 3 (high-level, keep it small): *"Given ~1,000 writes and ~100,000 reads a day, I'll start deliberately simple: one API server and one database with a `short_code → long_url` table. POST creates a code from an auto-increment ID encoded in Base62, GET looks it up and returns a 302. At this scale that's genuinely enough."* Naming the numbers proves the simplicity is a decision, not a gap.
+
+Minute 5 (deep-dive where it earns marks): *"The interesting part is read load. Clicks repeat the same hot codes, so I'll cache code→URL pairs in Redis — most redirects never touch the database. If traffic outgrows one server, I put stateless copies behind a load balancer; the database and cache stay shared, so scaling the servers is trivial."* You ends on the bottleneck *and* its fix, which is exactly the note the interviewer writes down.
+
 🎤 What the interviewer actually asks: "What if two people shorten the same URL?" — Perfectly fine either way: two codes pointing to one URL, or dedupe by checking for an existing row first. Name the behaviour; don't freeze.
 
 ---
@@ -142,6 +171,16 @@ messages(id, sender_id, receiver_id, text, sent_at)
 
 **One honest limit to state:** A single server can hold only so many open WebSockets. At real scale you'd add a load balancer that understands WebSockets and a pub/sub layer so Server A can reach a user connected to Server B. Naming the limit (without solving all of it) is peak fresher-level maturity.
 
+### How to say it — minute by minute
+
+Minute 1 (clarify the scope): *"Is this 1-to-1 only or groups too? Must messages arrive if the receiver is offline, or is best-effort okay? Are we storing history, or is it ephemeral like Snapchat?"* Each answer removes a whole branch of design — that *is* the work.
+
+Minute 3 (core flow, durability first): *"Each user keeps one open WebSocket to the server. When Ayesha sends a message, my server saves it to the database first, then pushes it to Rohan if he's online. If he's offline, nothing is lost — he fetches unread messages on his next login. Durability before delivery."* That ordering sentence is the one interviewers circle.
+
+Minute 5 (numbers + the honest limit): *"At fresher scale — say 10,000 users sending 20 messages a day — that's 200,000 small rows a day, nothing for one database, and 10,000 concurrent connections is already where one server sweats. So my scale-up path is: load balancer that understands WebSockets, plus a pub/sub layer so any server can reach a user connected to any other. I'd name that limit now rather than pretend one box holds everyone."*
+
+Small capacity check to keep in your pocket: messages are tiny (~200 bytes), so even 200k/day is ~40 MB/day of storage — trivial to store, which is why you can afford the save-first design. Do the arithmetic out loud; rough-and-right beats precise-and-silent.
+
 ---
 
 ## 📖 5. Scaling Words Glossary
@@ -159,8 +198,49 @@ Learn these five cold — one line each. This is 80% of the "scaling" vocabulary
 > [!TIP]
 > **Vertical vs horizontal scaling** is the favourite follow-up: "Vertical = a bigger machine (simple, hits a ceiling). Horizontal = more machines (needs a load balancer, scales much further)." Say both halves.
 
+Quick self-test before any interview — cover the right column and recite:
+
+- Cache → "what repeats?" Hot reads live in memory.
+- Load Balancer → "who's the door?" One entry, many identical servers.
+- CDN → "what's static?" Files served from near the user.
+- Sharding → "what's too big?" Split by key across machines.
+- Replication → "what if it dies?" Copies; primary writes, replicas read.
+
 > [!NOTE]
 > **One-line interview answer:** "Scale reads with caching and replicas, scale traffic with a load balancer and stateless servers, and shard only when one database truly can't hold or serve the data."
+
+### Where exactly does each box sit? Trace one request
+
+Follow a single click on your URL shortener and watch each box take its turn:
+
+```text
+1. Browser asks DNS for sho.rt → connects to the LOAD BALANCER (the only public door)
+2. Load balancer picks the least-busy API server and forwards the request
+3. Static assets (logo, CSS) never reach your server — the CDN already served
+   cached copies from a machine near the user
+4. API server checks the CACHE (Redis): "aB3xK9 → long URL?" — hit → answer now
+5. Cache miss → query the DATABASE → store the pair in cache → 302 redirect
+6. Next 10,000 clicks on aB3xK9 repeat steps 1–4 only. The DB rests.
+```
+
+Each box earns its place in that trace: the CDN absorbs static traffic before it costs you anything, the load balancer makes your servers replaceable, the cache absorbs repeat reads, and the database — your source of truth — only handles what nobody has cached yet. If an interviewer points at any box and asks "why is this here?", retrace the request and show the step that disappears without it. No step, no box.
+
+> [!WARNING]
+> **Common mistake:** drawing a cache, CDN, and load balancer into a design for 100 users "for scalability." Every box you add is a box you must operate and explain. Add each piece only when your capacity numbers show the simpler design straining.
+
+### The 10× question, answered in order
+
+"Your app just got 10× traffic" is a scripted follow-up — answer it as a sequence, not a shopping list:
+
+```text
+Step 1: MEASURE — which box is hot? (CPU? DB queries? bandwidth?)
+Step 2: CACHE the hottest reads (usually removes 80–90% of repeat DB load)
+Step 3: SCALE servers horizontally behind the load balancer (stateless → trivial)
+Step 4: REPLICAS if the database is still the wall (reads spread, writes stay primary)
+Step 5: SHARD only when one database cannot hold or serve the data at all
+```
+
+Notice what is *not* on the list: rewriting into microservices. Scaling is about relieving the measured bottleneck one cheap step at a time, and saying "I'd measure first, because the obvious guess is wrong half the time" is a genuinely senior sentence. Each step also maps to a glossary word above — use their names.
 
 ---
 
@@ -176,6 +256,8 @@ Learn these five cold — one line each. This is 80% of the "scaling" vocabulary
 
 > [!WARNING]
 > **The golden rule:** a simple design you can fully explain beats a complex diagram you memorised. If you can't say *why* a box exists, delete the box.
+
+A closing habit that ties this whole file together: after any design, volunteer your own bottleneck before the interviewer finds it. One honest sentence — "the single database is my limit today; if writes grow 100× I'd shard by user_id, and if reads grow I'd add replicas behind the cache" — converts every weakness into evidence you were thinking like an engineer the whole time. Interviewers remember candidates who grade themselves accurately.
 
 ---
 

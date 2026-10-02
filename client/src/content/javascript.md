@@ -134,6 +134,21 @@ console.log(y); // ❌ ReferenceError: Cannot access 'y' before initialization
 let y = 5;
 ```
 
+**Watch hoisting run, using the two phases:**
+
+```js
+console.log(score);   // line 1
+var score = 90;       // line 2
+console.log(score);   // line 3
+```
+
+1. **Creation phase:** before anything executes, JavaScript scans the scope and registers `score` in memory, initialising the slot to `undefined`. (This registration *is* the hoisting.)
+2. **Execution, line 1:** `console.log(score)` looks up the slot — it exists and holds `undefined` → prints `undefined`, no error.
+3. **Execution, line 2:** the assignment `score = 90` finally runs, filling the slot with `90`.
+4. **Execution, line 3:** prints `90`.
+
+So the code behaves *as if* `var score;` were written at the very top while `score = 90` stayed on line 2 — because effectively, that's what the engine did. Swap `var` for `let` and line 1 crashes instead: the slot exists from the creation phase, but `let` slots stay *uninitialised* until their declaration line executes — the TDZ, explained next.
+
 ### ⏳ The Temporal Dead Zone (TDZ)
 
 > [!IMPORTANT]
@@ -160,6 +175,9 @@ var sayHi = function () {
 ```
 
 Here only `var sayHi` is hoisted (as `undefined`). Calling `undefined()` gives `TypeError: sayHi is not a function` — notice it's a *Type*Error, not a *Reference*Error, because the variable exists but holds no function yet.
+
+> [!NOTE]
+> **Under the hood:** Before a single line of your code runs, JavaScript does a quiet "creation phase" walk through the scope and sets up memory slots for every declaration it finds. `var` slots are filled with `undefined` immediately; `let`/`const` slots are created but left *uninitialised* (that waiting period is the TDZ); function declarations get their entire body stored. Then the "execution phase" runs your code top to bottom, replacing slot values as it reaches each assignment. Hoisting is just you peeking at a slot before its assignment line has run.
 
 > [!WARNING]
 > **Error-type trap:** `ReferenceError` = the variable doesn't exist / is in TDZ. `TypeError: x is not a function` = the variable exists but isn't a function (usually a hoisted `var` that's still `undefined`).
@@ -221,11 +239,102 @@ const another = counter();
 console.log(another()); // 1 — separate count, starts over
 ```
 
+**Watch it run, line by line:**
+
+```js
+function counter() {
+  let count = 0;
+  return function () {
+    count++;
+    return count;
+  };
+}
+
+const c = counter();
+console.log(c()); // ?
+console.log(c()); // ?
+```
+
+1. `counter()` runs. A fresh `count = 0` is created inside it.
+2. `counter()` returns the inner function and finishes. Normally `count` would be thrown away now — but the returned function still *mentions* `count`, so JavaScript keeps that variable alive in a hidden memory area attached to the function. That saved environment **is** the closure.
+3. `c()` runs the inner function: it looks up `count`, finds `0` in its saved environment, bumps it to `1`, returns `1`.
+4. `c()` again: same saved environment, `count` is now `1`, becomes `2`, returns `2`.
+
+Output: `1`, then `2`. And every separate `counter()` call builds a *separate* saved environment — which is why `another()` above started back at `1`.
+
+> [!NOTE]
+> **Under the hood:** A closure does **not** copy the *value* of the outer variable — it keeps a reference to the variable itself (its slot in the "environment record"). So if outer code changes the variable later, the closure sees the new value. It remembers the *variable*, not a photograph of it. This one fact explains almost every closure bug ever written.
+
+**One more worked example — a function factory:**
+
+```js
+function makeMultiplier(factor) {
+  return function (n) {
+    return n * factor;
+  };
+}
+
+const double = makeMultiplier(2);
+const triple = makeMultiplier(3);
+
+console.log(double(5)); // 10
+console.log(triple(5)); // 15
+```
+
+`double` and `triple` run the *same* inner-function code, but each closes over a different `factor` (2 vs 3). One function template, many specialised functions — that's a factory.
+
+**The loop + closure classic — `var` vs `let` side by side:**
+
+```js
+for (var i = 0; i < 3; i++) {
+  setTimeout(() => console.log("var:", i), 0);
+}
+
+for (let i = 0; i < 3; i++) {
+  setTimeout(() => console.log("let:", i), 0);
+}
+```
+
+Output:
+
+```
+var: 3
+var: 3
+var: 3
+let: 0
+let: 1
+let: 2
+```
+
+With `var` there is only **one** `i` for the whole loop, and all three callbacks close over that same variable — by the time they run, the loop has finished and `i` is `3`. With `let`, each iteration creates a **fresh** `i`, so each callback closes over its own variable: 0, 1, 2. (Section 13 revisits this as a trap — it combines closures, scope, and the event loop in a single question.)
+
+> [!WARNING]
+> **Common mistake:** assuming a closure froze the value at the moment it was created. It didn't — it kept the *variable*. Loop with `var`, or mutate a captured variable after creating the closure, and the closure will happily use the latest value. When you need a frozen snapshot per iteration, use `let`, or pass the value into another function so each callback gets its own variable to close over.
+
 > [!IMPORTANT]
 > **Why closures matter (say this in interviews):**
 > - **Data privacy / encapsulation** — `count` above cannot be read or changed from outside; only the returned function can touch it. This is how you fake "private variables" in JS.
 > - **Function factories** — `makeMultiplier(2)` returning a doubler function.
 > - **React hooks** — `useState` and event handlers rely on closures; a stale-closure bug is a famous React interview topic.
+
+Try it yourself — finish the counter:
+
+```playground Closures: build a counter
+function makeCounter() {
+  let count = 0;
+  return function () {
+    // TODO: increase count by 1 first, then return it
+    return count;
+  };
+}
+
+const c1 = makeCounter();
+console.log(c1()); // goal: 1
+console.log(c1()); // goal: 2
+
+const c2 = makeCounter();
+console.log(c2()); // goal: 1 — a fresh, separate count
+```
 
 **🎤 What the interviewer actually asks:** *"What is a closure?"* (definition + one example), *"Give a real use case"* (private counter), and often the trap in Section 13 — `var` + loop + `setTimeout`.
 
@@ -305,6 +414,35 @@ team.list(); // 2 "A"   2 "B"
 
 With a normal `function` callback inside `forEach`, `this` would have been lost. This is *the* reason arrows are used in callbacks.
 
+### Borrowing a method — `call`, `apply`, `bind` in action
+
+Sometimes you *want* to run a function with a different `this`. Three tools do exactly that:
+
+```js
+function introduce(city) {
+  console.log(`${this.name} from ${city}`);
+}
+
+const a = { name: "Ayushi" };
+const b = { name: "Ikra" };
+
+introduce.call(a, "Ghaziabad");  // "Ayushi from Ghaziabad" — runs NOW, args one by one
+introduce.apply(b, ["Delhi"]);   // "Ikra from Delhi" — runs NOW, args as one array
+const bound = introduce.bind(a); // does NOT run — returns a copy with this locked to a
+bound("Mumbai");                 // "Ayushi from Mumbai"
+```
+
+**Watch `introduce.call(a, "Ghaziabad")` run, line by line:**
+
+1. `call` takes the function `introduce` plus an object, `a`.
+2. It runs `introduce` *immediately*, but with `this` forced to `a`.
+3. Inside, `this.name` reads `a.name` → `"Ayushi"`, and the extra argument fills the `city` parameter.
+
+`apply` is identical except the arguments arrive as one array (handy when you already have an array). `bind` is the odd one out: it runs nothing — it *returns a copy* of the function with `this` permanently glued on, ready to call later. That's why `bind` fixes the detached-method bug from earlier: `const g = user.greet.bind(user)` keeps `this` attached to `user` forever, no matter who calls `g` afterwards.
+
+> [!WARNING]
+> **Common mistake:** using an arrow function as an object method and wondering why `this.name` prints `undefined`. Arrows never receive their own `this` — not from a method call, and not even from `call`/`bind` (there's nothing to rebind). Use a normal function or the short method syntax for object methods, and save arrows for callbacks *inside* methods, where inheriting the outer `this` is exactly what you want.
+
 **🎤 What the interviewer actually asks:** *"What is this?"*, *"Arrow vs normal function — differences?"*, and the killer follow-up — *"What will this print?"* (using the `const g = obj.greet` trick above).
 
 ---
@@ -341,6 +479,16 @@ The `+` operator is two-faced: if **either** side is a string, it does string **
 [1, 2] + [3]   // "1,23" — arrays join with commas, then concatenate
 "A" - "B"      // NaN   — "A" can't become a number
 ```
+
+**Watch `1 + "2" + "2"` run, one operator at a time:**
+
+| Step | Expression so far | Rule applied | Result |
+|---|---|---|---|
+| Start | `1 + "2" + "2"` | — | — |
+| First `+` | `1 + "2"` | A string is present → concatenate | `"12"` |
+| Second `+` | `"12" + "2"` | String again → concatenate | `"122"` |
+
+`+` has no memory and no mercy — it re-decides "add or concatenate?" at every single step, purely from the two values touching it. That's why `1 + 2 + "3"` is `"33"` (numbers add first: `3`, then concatenate), but `"1" + 2 + 3` is `"123"` (string from the very first step, so everything concatenates). Read left to right, decide at each `+`, and you can solve any coercion puzzle they throw at you.
 
 > [!WARNING]
 > **NaN rules:** `NaN` is the result of a failed number conversion. And famously, `NaN === NaN` is **false** — NaN is not equal to anything, not even itself. To test for it, use `Number.isNaN(value)`.
@@ -381,6 +529,39 @@ const sum = nums.reduce((acc, n) => acc + n, 0); // 15
 
 `reduce` is the most powerful and the most feared. Remember its shape: `reduce((accumulator, currentItem) => newAccumulator, startingValue)`. It can build sums, objects, grouped data — anything.
 
+**Watch `reduce` run — the accumulator, step by step:**
+
+```js
+const total = [10, 20, 30].reduce((acc, n) => acc + n, 0);
+```
+
+| Step | `acc` (running total) | `n` (current item) | Callback returns (`acc + n`) |
+|---|---|---|---|
+| Start | `0` — the starting value you passed | — | — |
+| Item 10 | 0 | 10 | 10 |
+| Item 20 | 10 | 20 | 30 |
+| Item 30 | 30 | 30 | 60 |
+
+Final answer: `60`. The golden rule: **whatever the callback returns becomes the next round's `acc`.** The starting value matters more than people think — skip it and `reduce` uses the first item as `acc` and starts from the second item; on an *empty* array with no starting value, it throws a `TypeError`. In an interview, always say the starting value out loud.
+
+**One more worked example — counting with `reduce`:**
+
+```js
+const fruits = ["apple", "banana", "apple", "orange", "banana", "apple"];
+
+const counts = fruits.reduce((acc, fruit) => {
+  acc[fruit] = (acc[fruit] || 0) + 1;
+  return acc;
+}, {});
+
+console.log(counts); // { apple: 3, banana: 2, orange: 1 }
+```
+
+Here the accumulator is an *object*, not a number — proof that `reduce` can boil an array down to any single value: a sum, an object, a grouped report, even another array.
+
+> [!WARNING]
+> **Common mistake:** forgetting to `return` inside a `reduce` callback that uses `{ }` braces. The next round's `acc` becomes `undefined`, and everything quietly collapses into `NaN` or a crash. An arrow one-liner returns automatically; the moment you open braces, the `return` is your job. (Same trap hides inside `map` and `filter` callbacks with braces.)
+
 ### `forEach` — just run something for each item; returns `undefined`
 
 ```js
@@ -403,6 +584,23 @@ nums.forEach(n => console.log(n)); // prints 1..5, returns undefined
 > Other methods worth one line each: `find` (first match or `undefined`), `some` (any match? boolean), `every` (all match? boolean), `includes` (contains this exact value?), `slice` (copy a portion — doesn't mutate), `splice` (remove/insert — **mutates** ⚠️), `sort` (**mutates** ⚠️ and sorts numbers as strings by default — pass `(a, b) => a - b`).
 
 **🎤 What the interviewer actually asks:** *"map vs filter vs reduce vs forEach — differences?"* and *"Write the sum of an array using reduce"* and *"Does map mutate the original?"* (no).
+
+Try it yourself:
+
+```playground Array methods: map, filter, reduce
+const products = [
+  { name: "Pen", price: 20 },
+  { name: "Notebook", price: 120 },
+  { name: "Bag", price: 900 },
+  { name: "Bottle", price: 350 },
+];
+
+// TODO 1: use map to get an array of just the names
+// TODO 2: use filter to keep products priced 100 or more
+// TODO 3: use reduce to find the total price of all products
+
+console.log("products:", products.length); // then log your three results below
+```
 
 ---
 
@@ -528,6 +726,51 @@ sayHello("Ayushi"); // "Hello, Ayushi!"
 
 Closures (Section 4) are what make that `greet` example work — the returned function remembers `greeting`.
 
+### Debounce — run it only when things go quiet
+
+A **debounced** function waits until you *stop* calling it for a moment, and only then runs — once. The classic use is a search box: you don't want an API call on every keystroke, only when the user pauses typing.
+
+```js
+function debounce(fn, delay) {
+  let timerId;
+  return function (...args) {
+    clearTimeout(timerId);           // cancel the previously planned run
+    timerId = setTimeout(() => {     // plan a fresh run `delay` ms from now
+      fn(...args);
+    }, delay);
+  };
+}
+```
+
+**Watch it run:** you type `r`, `re`, `rea`, `react` quickly, each keystroke less than 300ms apart. Every keystroke *cancels* the previous timer and starts a new one, so `fn` never gets its turn. You stop typing → the last timer finally completes → `fn` runs **once**, with `"react"`. Five keystrokes, one API call. And notice: this works *because of closures* — the returned function remembers `timerId` between calls, which is what makes cancelling possible.
+
+> [!WARNING]
+> **Common mistake:** creating the debounced function *inside* the event handler, like `onChange={() => debounce(search, 300)(text)}`. That builds a brand-new debouncer with a brand-new `timerId` on every keystroke, so nothing is ever cancelled and you get zero benefit. Create the debounced version **once**, outside the handler, and reuse it.
+
+Try it yourself:
+
+```playground Debounce a search box (simulated)
+function fakeSearch(text) {
+  console.log("Searching for:", text);
+}
+
+function debounce(fn, delay) {
+  // TODO: keep a timerId in a closure.
+  // Each call: clearTimeout the old timer, then setTimeout a new one
+  // that runs fn(...args) after `delay`.
+  return fn; // replace this line with your debounced wrapper
+}
+
+const debouncedSearch = debounce(fakeSearch, 100);
+
+// Simulated fast typing: r, re, rea, react
+debouncedSearch("r");
+debouncedSearch("re");
+debouncedSearch("rea");
+debouncedSearch("react");
+// Goal: after ~100ms of quiet, only ONE log — "Searching for: react"
+```
+
 **🎤 What the interviewer actually asks:** *"What is a callback?"*, *"What is a higher-order function?"* (name `map`/`filter` as examples), *"What is an IIFE and why was it used?"*, and *"Arrow function vs normal function?"* (go back to the `this` table in Section 5).
 
 ---
@@ -553,6 +796,48 @@ myPromise
   .catch(err => console.log(err))         // runs on failure
   .finally(() => console.log("Done"));    // runs either way
 ```
+
+**Watch a chain run, link by link:**
+
+```js
+Promise.resolve(5)
+  .then(n => {
+    console.log("first:", n);   // first: 5
+    return n * 2;               // hands 10 to the next .then
+  })
+  .then(n => {
+    console.log("second:", n);  // second: 10
+    return n + 1;               // hands 11 along
+  })
+  .then(n => console.log("third:", n)); // third: 11
+```
+
+1. `Promise.resolve(5)` creates an already-fulfilled promise holding `5`.
+2. The first `.then` receives `5`. Whatever it **returns** becomes the value the next `.then` receives — here, `10`.
+3. The second `.then` receives `10`, returns `11`.
+4. The third `.then` just logs `11`. Chain over.
+
+The rule to say out loud: *each `.then` receives what the previous one returned.* Return nothing, and the next one receives `undefined` — a classic silent bug that produces no error, just wrong data.
+
+**How errors travel through a chain:**
+
+```js
+Promise.resolve(10)
+  .then(n => {
+    console.log("step 1:", n);        // step 1: 10
+    throw new Error("boom at step 2");
+  })
+  .then(n => {
+    console.log("step 3 never runs"); // skipped!
+    return n;
+  })
+  .catch(err => console.log("caught:", err.message)); // caught: boom at step 2
+```
+
+The moment anything in a chain throws (or returns a rejected promise), **all remaining `.then`s are skipped** and control jumps straight to the nearest `.catch`. One `.catch` at the end guards the whole chain — you don't need one per step.
+
+> [!WARNING]
+> **Common mistake:** forgetting to `return` a promise inside `.then`. If you start an async step but don't return it, the next `.then` runs *immediately* with `undefined` instead of waiting for it. `return fetch(...)` — that one word is the difference between a chain and a race.
 
 ### async/await — promises in a cleaner outfit
 
@@ -590,6 +875,24 @@ const b = await fetch(url2);
 const [a, b] = await Promise.all([fetch(url1), fetch(url2)]);
 ```
 
+**Feel the timing difference** — imagine each fake API call takes about a second:
+
+```js
+// Sequential: start one, wait, THEN start the next → ~2 seconds total
+const userA = await getUser(1);   // waits ~1s
+const userB = await getUser(2);   // only starts now — waits ~1s more
+
+// Parallel: start both, THEN wait once → ~1 second total
+const promiseA = getUser(1);      // starts immediately (call = start)
+const promiseB = getUser(2);      // starts immediately too
+const [userA2, userB2] = await Promise.all([promiseA, promiseB]); // wait for both together
+```
+
+The key insight: **`await` doesn't start anything — calling the async function starts it; `await` only waits.** So "parallel" really means: start everything first, and do your single `await` at the end. This is exactly the same idea as the `Promise.all` version above — starting the promises early *is* the parallelism.
+
+> [!WARNING]
+> **Common mistake:** `await` inside a loop (`for (...) { await fetch(...) }`) when the calls don't depend on each other. Every iteration waits for the previous one to finish, turning ten fast parallel calls into a slow queue. Collect the promises in an array first, then `Promise.all` them in one go. The only time sequential `await` is correct is when a call genuinely needs the previous call's result.
+
 > [!TIP]
 > **Interview gold:** independent API calls should run in parallel with `Promise.all`. Only `await` one-by-one when the second call *needs the first call's result*. If asked "how do you handle errors in async/await?" — answer: `try/catch`, and mention `.catch()` for promise chains.
 
@@ -625,6 +928,11 @@ flowchart TD
 > [!IMPORTANT]
 > **The priority rule (memorise this):** after the current task finishes, the event loop first drains the **entire** microtask queue — including microtasks created by microtasks — and only **then** takes **one** macrotask. Repeat forever.
 
+Step through it visually:
+
+```visual event-loop
+```
+
 ### The classic example — predict the output
 
 ```js
@@ -654,6 +962,63 @@ console.log("4. end");
 
 > [!WARNING]
 > **The 0-delay trap:** `setTimeout(fn, 0)` does NOT run `fn` after 0ms. It runs after the current synchronous code AND all microtasks finish. If your sync code runs for 2 seconds, the "0ms" timer fires at 2 seconds.
+
+### Microtasks can jump the queue — a trickier walkthrough
+
+```js
+console.log("A");
+
+setTimeout(() => console.log("B"), 0);
+
+Promise.resolve().then(() => {
+  console.log("C");
+  Promise.resolve().then(() => console.log("D"));
+});
+
+console.log("E");
+```
+
+Predict before you read on. The output is:
+
+```
+A
+E
+C
+D
+B
+```
+
+**Watch it run, line by line:**
+
+1. Synchronous code runs first: `A` prints. The timer callback parks in the **macrotask** queue. The `.then` callback parks in the **microtask** queue. `E` prints. The call stack is now empty.
+2. The loop drains microtasks before touching anything else. The first microtask prints `C` — and *creates a brand-new microtask* (the inner `.then`), which joins the back of the microtask queue.
+3. The loop does **not** touch the timer yet — microtasks aren't finished. The new microtask runs and prints `D`.
+4. Only now, with the microtask queue completely empty, does the loop take one macrotask: the timer prints `B`.
+
+That's the full rule in action: *all* microtasks — including ones born mid-drain — run before even a single macrotask. Nest promises three levels deep and they still all beat the timer.
+
+> [!WARNING]
+> **Common mistake:** treating `setTimeout(0)` and `Promise.resolve().then(...)` as "equally async." They are not — promise callbacks are microtasks and *always* overtake timer callbacks, no matter which was written first. If an interviewer shows you both in one snippet, the promise prints first. Every time.
+
+Now predict, then run:
+
+```playground Predict the order: promises vs timers
+console.log("1 sync start");
+
+setTimeout(() => console.log("2 timer"), 0);
+
+Promise.resolve().then(() => console.log("3 promise"));
+
+async function go() {
+  console.log("4 inside async");
+  await Promise.resolve();
+  console.log("5 after await");
+}
+go();
+
+console.log("6 sync end");
+// Predict the full order first — then run and check yourself!
+```
 
 **🎤 What the interviewer actually asks:** *"Is JavaScript single-threaded? Then how does it handle async work?"* (event loop answer), *"Microtask vs macrotask?"*, and — almost guaranteed — *"What is the output of this code?"* with the exact snippet above. Learn it cold.
 

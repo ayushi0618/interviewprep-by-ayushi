@@ -20,6 +20,8 @@ Next.js is what interviewers bring up right after React — "Have you used Next.
 
 **Why companies pick it:** plain React renders in the browser, so search engines and social-media previews see an almost-empty page first. Next.js can send ready-made HTML from the server — better SEO, faster first paint, and happier users on slow phones.
 
+Keep the definitions honest: React decides *what* the UI is; Next decides *where and when* it renders, how URLs map to it, and where the API lives. That division of labour is the answer to give before any feature list.
+
 **🎤 What the interviewer actually asks:** *"What is Next.js? Why not just React?"* — answer: React is the library, Next.js is the framework around it (routing + rendering + APIs).
 
 ## 📌 2. File-Based Routing
@@ -47,6 +49,22 @@ export default async function BlogPost({ params }: { params: Promise<{ id: strin
 
 Layout files (`layout.tsx`) wrap pages with shared UI like a navbar, so it doesn't re-render on every navigation — mention this if asked "how do you share a header across pages?"
 
+### Trace a URL to its file (the 20-second whiteboard skill)
+
+Interviewers love asking "where does `/dashboard/settings` live?" Walk it folder by folder:
+
+```text
+URL: /dashboard/settings            → app/dashboard/settings/page.tsx
+URL: /shop/shoes/red-sneakers       → app/shop/[category]/[slug]/page.tsx
+URL: /                              → app/page.tsx
+URL: /login                         → app/login/page.tsx   (no layout from dashboard/)
+```
+
+Rules that make the trace work: each URL segment is one folder; `page.tsx` is the leaf that actually renders; a `layout.tsx` in any folder wraps everything beneath it (so `app/dashboard/layout.tsx` gives every dashboard page the same sidebar, while `/login` outside that folder never sees it); square brackets capture that segment as a param. If you can narrate one URL down the folder tree and name which layouts wrap it, you've answered 90% of routing follow-ups.
+
+> [!WARNING]
+> **Common mistake:** putting components you never want routed inside `app/`. In the App Router, *every* folder with a `page.tsx` is public. Keep private helpers in a separate `components/` folder outside the route tree.
+
 **🎤 What the interviewer actually asks:** *"How does routing work in Next.js?"* and *"How do you make a dynamic route like /blog/5?"*
 
 ## 📌 3. Pages Router vs App Router
@@ -64,6 +82,8 @@ Next.js has two router generations. You will see both in real codebases, so know
 
 > [!TIP]
 > Interview-safe line: *"Pages Router is the original system in the `pages` folder; App Router in the `app` folder is the current default, built on Server Components. New projects use App Router, but plenty of production apps still run Pages Router."* That one sentence covers most follow-ups.
+
+The mental model in one breath: Server Components run only on the server — they can `await` a database or `fetch` directly and ship zero JavaScript for themselves. Client Components (marked `"use client"`) run in the browser for interactivity like clicks and state. A real App Router page mixes both: a Server Component fetches the data, then hands it to a small Client Component that handles the buttons. Saying that sentence — server for data, client for interaction — answers most App Router follow-ups before they're asked.
 
 **🎤 What the interviewer actually asks:** *"Pages Router or App Router — what's the difference?"* and *"What are Server Components in one line?"* (Components that run only on the server, so they can fetch data directly and ship zero JS to the browser.)
 
@@ -89,6 +109,18 @@ export const revalidate = 60;
 > [!WARNING]
 > SSR on *every* page is a common fresher mistake — it makes the server work on every visit and kills the speed benefit. Static wherever possible; server-render only what truly changes per user or per second.
 
+### Same product page, three ways — what the user actually receives
+
+Take one page, `/products/42`, and follow the HTML home in each mode:
+
+With **CSR**, the server sends a nearly empty shell plus a JavaScript bundle. The browser downloads the JS, runs it, fires a fetch for product 42, and only then paints the product. First paint is a spinner; a search engine sees the shell. Fast to build, slow to *show*.
+
+With **SSR**, the request itself triggers the work: the server fetches product 42, renders full HTML containing the real title, price, and image, and ships that. The user's first paint *is* the product; JavaScript then "hydrates" the static HTML so buttons become clickable. Every single visit repeats this server work, so it's always fresh but never free.
+
+With **SSG**, the HTML was already built when you deployed — product 42's page is a finished file waiting on disk or a CDN. The request just serves that file, instantly, identically for everyone. Blazing fast, but if the price changed an hour ago, the page still shows the old one until the next build (or an ISR revalidation quietly rebuilds it).
+
+Say it like this: "The strategies differ in *when* the HTML is made — browser after load, server per request, or once at build time — and that single timing choice decides freshness, speed, and SEO." Same page, three clocks. That sentence is the section.
+
 **🎤 What the interviewer actually asks:** *"SSR vs SSG — what's the difference?"* and *"What is ISR?"* ISR is the one that impresses: "static speed, but the page quietly rebuilds itself after a time interval I set."
 
 ## 📌 5. Data Fetching — One Line Per Era
@@ -110,6 +142,26 @@ export default async function Products() {
 
 > [!NOTE]
 > Notice what's missing: no `useEffect`, no loading state juggling for the first render. Because the component runs on the server, the data is *already there* when the HTML ships. Client components still fetch the Pages-era way (hooks + fetch) when data depends on user interaction.
+
+The same product list, fetched honestly in each world:
+
+```tsx
+// Pages Router — build time (SSG): runs once, result frozen into the page
+export async function getStaticProps() {
+  const products = await db.product.findMany();
+  return { props: { products }, revalidate: 60 }; // + revalidate → ISR
+}
+// Pages Router — per request (SSR): runs on the server for *every* visit
+export async function getServerSideProps() {
+  const products = await db.product.findMany();
+  return { props: { products } };
+}
+```
+
+App Router collapses both into the component itself: plain `fetch` with default caching behaves like SSG, `fetch(url, { cache: "no-store" })` behaves like SSR, and adding `export const revalidate = 60` gives you ISR — the *intent* is identical, only the spelling changed. If an interviewer shows you the Pages spelling, translate it out loud ("that's build-time fetching, so SSG") and you've proven you understand the concepts, not just one syntax.
+
+> [!WARNING]
+> **Common mistake:** fetching initial page data in a Client Component with `useEffect` "because that's how React works." You re-create the CSR spinner problem inside a framework built to avoid it. Server-fetch the first paint; reserve client fetching for interactions (search-as-you-type, infinite scroll).
 
 **🎤 What the interviewer actually asks:** *"How do you fetch data in Next.js?"* — name the era you're in: `getServerSideProps`/`getStaticProps` for Pages, plain `async` + `fetch` in Server Components for App Router.
 
@@ -134,6 +186,18 @@ export async function POST(req: Request) {
 
 **🎤 What the interviewer actually asks:** *"Can Next.js replace a backend?"* — for small-to-medium apps, yes: API routes are real server code in the same repo. You'd still split out a dedicated backend when the API outgrows the site.
 
+Trace one request so the boundary is concrete:
+
+```text
+Browser → POST /api/users { name: "Ayushi" }
+  → Next matches app/api/users/route.ts → runs POST() ON THE SERVER
+  → Validate input → insert via DB client (password lives only in env)
+  → Return Response.json({ id: 7 }, { status: 201 })
+Browser receives JSON only — no SQL, no secrets, no server code
+```
+
+That round trip is why API routes are the safe home for secrets, validation, and database calls: the client requests, but never sees the machinery. Keep handlers thin (validate → service → respond) and a growing backend stays easy to lift into its own service later.
+
 ## 📌 7. `Link` and `Image` in One Line Each
 
 - **`<Link>`** — client-side navigation without a full page reload (prefetches linked pages in the background, so clicks feel instant). Use it instead of `<a>` for internal pages.
@@ -141,6 +205,8 @@ export async function POST(req: Request) {
 
 > [!TIP]
 > These two are easy marks: if asked "what built-in optimisations does Next give you?", answering *"`<Link>` prefetches pages, `<Image>` optimises and lazy-loads images automatically"* is a complete fresher answer.
+
+One concrete difference to keep in your pocket: a plain `<a href="/about">` throws the whole page away and reloads everything — HTML, CSS, JS, the navbar you already had. `<Link>` swaps only the page content, keeps shared layouts mounted, and quietly prefetches the target while the user is still reading. That's why Next navigations feel instant even on average networks.
 
 ## 📌 8. When to Choose Next.js over Plain React (and When NOT To)
 
@@ -159,6 +225,19 @@ export async function POST(req: Request) {
 
 > [!IMPORTANT]
 > **The balanced interview answer:** "Next.js when the site is public, content-driven, or needs a light backend in the same repo. Plain React when it's a private, app-like tool where SEO doesn't matter and a framework's server features would just be weight."
+
+An honest side-by-side to say out loud — including where plain React genuinely wins:
+
+| Question | Plain React (Vite) | Next.js |
+|---|---|---|
+| Who sees the first paint? | A spinner until JS + fetch finish | Real HTML immediately (SSR/SSG) |
+| SEO / social previews | Poor — crawlers get an empty shell | Strong — content is in the HTML |
+| Routing | You install and configure a router | Folders are routes, zero config |
+| Backend | Separate project (Express, etc.) | API routes in the same repo |
+| Cost of ownership | Tiny, fully client-side, cheap static hosting | Server rendering costs compute per request (SSR) |
+| Best habitat | Private dashboards, internal tools, embedded widgets | Public sites, stores, blogs, mixed apps |
+
+The fresher trap is claiming Next.js is "just better." Interviewers reward the conditional answer: reach for the framework when the public, content, or SEO requirements pay for its server — and happily ship plain React when they don't.
 
 **🎤 What the interviewer actually asks:** *"Would you use Next.js for every project?"* — No, and the reason (private apps don't need server rendering) is exactly what they want to hear.
 

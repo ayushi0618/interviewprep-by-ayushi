@@ -1,10 +1,17 @@
 import { useMemo } from 'react';
 import { marked } from 'marked';
-import { renderMarkdown } from '../lib/markdown';
+import { renderMarkdown, splitSegments } from '../lib/markdown';
 import { TOPICS } from '../content/topics';
+import VISUALS from './visuals';
+import JsPlayground from '../components/playgrounds/JsPlayground';
+import SqlPlayground from '../components/playgrounds/SqlPlayground';
 
-// Renders one notes article: markdown → styled HTML, with working copy
-// buttons on code blocks and in-app navigation for internal .md links.
+// Renders one notes article as an ordered list of segments:
+//   md         → styled HTML via renderMarkdown (copy buttons + in-app links
+//                are handled by the delegated onClick on the <article> below)
+//   visual     → interactive React visualizer from the ./visuals registry
+//   playground → runnable JS playground,  sql → runnable SQL playground
+// Unknown visual names render a friendly fallback card instead of crashing.
 export default function ArticleRenderer({ topic, onNavigate }) {
   const slugByFile = useMemo(() => {
     const map = {};
@@ -12,8 +19,10 @@ export default function ArticleRenderer({ topic, onNavigate }) {
     return map;
   }, []);
 
-  const html = useMemo(() => renderMarkdown(topic.markdown, slugByFile), [topic, slugByFile]);
+  const segments = useMemo(() => splitSegments(topic.markdown), [topic]);
 
+  // One delegated handler for everything inside the article: copy buttons in
+  // code blocks and internal #article-<slug> links (converted by markdown.js).
   const handleClick = (e) => {
     // Copy button inside a code block
     const btn = e.target.closest('.copy-btn');
@@ -37,8 +46,41 @@ export default function ArticleRenderer({ topic, onNavigate }) {
     <article
       className="article-body bg-paper rounded-2xl shadow-card border border-amber-100/80 px-5 py-6 md:px-10 md:py-9"
       onClick={handleClick}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    >
+      {segments.map((seg, idx) => {
+        if (seg.type === 'md') {
+          return (
+            <div
+              key={idx}
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(seg.text, slugByFile) }}
+            />
+          );
+        }
+        if (seg.type === 'visual') {
+          const Visual = VISUALS[seg.name];
+          if (!Visual) {
+            return (
+              <div
+                key={idx}
+                className="my-6 rounded-2xl border border-dashed border-amber-300 bg-amber-50 px-5 py-6 text-center shadow-card"
+              >
+                <div className="mb-1 text-2xl">🧩</div>
+                <div className="font-semibold text-amber-900">Visualization coming soon</div>
+                {seg.name && <div className="mt-0.5 font-mono text-sm text-amber-700">{seg.name}</div>}
+              </div>
+            );
+          }
+          return <Visual key={idx} />;
+        }
+        if (seg.type === 'playground') {
+          return <JsPlayground key={idx} title={seg.title} code={seg.code} />;
+        }
+        if (seg.type === 'sql') {
+          return <SqlPlayground key={idx} title={seg.title} code={seg.code} />;
+        }
+        return null;
+      })}
+    </article>
   );
 }
 

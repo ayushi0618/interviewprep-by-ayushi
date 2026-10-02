@@ -67,6 +67,25 @@ function greet(name: string) {  // parameters MUST be annotated
 > [!IMPORTANT]
 > **The rule:** annotate parameters and API boundaries; let inference handle obvious locals.
 
+### Inference, line by line (how to "hover-think")
+
+Interviewers want to see you *predict* what TypeScript sees — exactly what hovering in VS Code shows:
+
+```ts
+let age = 21;                    // → number (first value locks the type)
+let marks = [90, 85, 78];        // → number[]
+let mixed = [1, "two", true];    // → (string | number | boolean)[]
+let user = { name: "Ayushi", age: 21 }; // → { name: string; age: number }
+```
+
+Step by step: TypeScript looks at the **first value** and remembers that shape forever — `age = "twenty-one"` errors even though plain JavaScript would allow it. For objects, TS builds the exact shape from your literal, so a missing property complains immediately.
+
+> [!NOTE]
+> **Under the hood:** inference is a left-to-right pass: literal → widened type → locked. `const role = "admin"` infers the literal `"admin"`; `let role = "admin"` widens to `string`. That tiny difference wins follow-ups.
+
+> [!WARNING]
+> **Common mistake:** annotating everything (`let age: number = 21`). It adds noise and can hide bugs — if the API later returns a string, your annotation lies while inference would have caught it. Annotate boundaries, trust inference inside.
+
 **🎤 What the interviewer actually asks:** *"Do you have to write types everywhere?"* — No. Inference covers locals; you write types at the boundaries.
 
 ## 📌 4. Interfaces vs Type Aliases
@@ -95,6 +114,20 @@ type ID = string | number;      // union (type only)
 
 > [!NOTE]
 > **The honest answer:** for plain objects they are ~95% interchangeable — `interface` for shapes, `type` for unions/helpers.
+
+### Same shape, both ways (see it side by side)
+
+Show the *same* object written both ways — it proves you're choosing, not guessing:
+
+```ts
+interface Product { id: number; title: string; price: number; }
+interface PricedProduct extends Product { discount: number; }
+
+type ProductT = { id: number; title: string; price: number; };
+type PricedProductT = ProductT & { discount: number; };
+```
+
+Both describe the identical runtime object. Differences only appear at the edges: interfaces *merge* if declared twice and give clearer errors; `type` can also name unions, tuples, and mapped helpers. In a real codebase, pick one style per project and stay consistent — that consistency *is* the professional answer.
 
 **🎤 What the interviewer actually asks:** *"Interface vs type — which do you use and why?"* Anyone claiming one is "always better" is repeating a myth — see Section 12.
 
@@ -144,6 +177,41 @@ const res: ApiResponse<string[]> = { data: ["a", "b"], success: true };
 > [!NOTE]
 > **Why not just use `any`?** Because `any` forgets the type — the result comes back as `any` and you lose every check downstream. Generics *remember*: numbers in, number out, and the compiler proves it.
 
+### From `any` to generic — the same function, rewritten step by step
+
+Step 1 — the `any` version (works, but tells you nothing):
+
+```ts
+function first(arr: any[]): any { return arr[0]; }
+const n = first([1, 2, 3]); // n is `any` — TS already forgot it's a number
+n.toUpperCase();           // compiles! crashes at runtime 💥
+```
+
+Step 2 — the problem: input and output are *related*, but `any` erases that link. Step 3 — introduce `<T>` so TypeScript tracks it:
+
+```ts
+function first<T>(arr: T[]): T { return arr[0]; }
+const n2 = first([1, 2, 3]); // T = number → n2 is number
+const s2 = first(["a", "b"]); // T = string → s2 is string
+n2.toUpperCase();            // ❌ error immediately — number has no toUpperCase
+```
+
+Say it like this: "I replaced `any` with `<T>`. Whatever flows in, the same `T` flows out — reuse *with* safety, no duplicate functions."
+
+```playground Playground: one function, any type (the generics idea)
+function first(arr) { return arr[0]; }
+console.log(first([10, 20, 30]));      // 10 — numbers in, number out
+console.log(first(["React", "Node"])); // "React" — strings in, string out
+// TODO: build a tiny stack (push/pop/peek) that works for numbers AND strings
+// with ONE implementation — that reuse-with-safety is the generics idea.
+function createStack() {
+  const items = [];
+  return { push(v) { items.push(v); }, pop() { return items.pop(); }, peek() { return items[items.length - 1]; } };
+}
+const s = createStack(); s.push(1); s.push(2);
+console.log("stack top:", s.peek()); // 2
+```
+
 **🎤 What the interviewer actually asks:** *"What are generics? Why not just use `any`?"* — that comparison is the whole answer.
 
 ## 📌 8. Type Narrowing
@@ -166,6 +234,47 @@ function printId(id: string | number) {
 
 > [!WARNING]
 > Truthiness narrowing has a trap: `if (value)` also removes the perfectly valid `0` and `""`. When those are legal values, check `value != null` instead of relying on truthiness.
+
+### Narrowing traced — one value, three guards
+
+Follow one call with your finger — this trace is what "I understand narrowing" sounds like:
+
+```ts
+type Shape = { kind: "circle"; radius: number } | { kind: "square"; side: number };
+function area(shape: Shape): number {
+  // TS knows only circle OR square here — shape.radius errors ❌
+  if (shape.kind === "circle") return Math.PI * shape.radius ** 2; // narrowed ✅
+  return shape.side * shape.side; // remainder auto-narrows to square ✅
+}
+```
+
+Two more guards you'll actually use:
+
+```ts
+function describe(value: string | string[] | null) {
+  if (value === null) return "nothing here";         // null removed below
+  if (Array.isArray(value)) return value.join(", "); // narrows → string[]
+  return value.toUpperCase();                        // only string reaches here
+}
+class ApiError extends Error { status = 500; }
+function handle(err: unknown) {
+  if (err instanceof ApiError) console.log(err.status); // instanceof → ApiError
+  else if (err instanceof Error) console.log(err.message);
+}
+```
+
+Every `if` *removes* possibilities — whatever survives is proven, no cast needed. That "prove it, don't assert it" mindset is the whole section in one sentence.
+
+```playground Playground: narrowing with typeof (plain JS)
+function printId(id) {
+  if (typeof id === "string") console.log("ID (text):", id.toUpperCase());
+  else if (typeof id === "number") console.log("ID (number):", id.toFixed(2));
+  else console.log("Unsupported ID type");
+}
+printId("a101"); printId(101); printId(true);
+// TODO: also handle an array of IDs and print each one. In TS this same
+// typeof check narrows string | number so only the right methods appear.
+```
 
 **🎤 What the interviewer actually asks:** *"What is type narrowing / a type guard?"* — name `typeof` and `instanceof` with one example each and you are done.
 
@@ -208,6 +317,31 @@ function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
 > [!IMPORTANT]
 > `useState<User | null>(null)` is the pattern interviewers probe: the generic says "a User *or* null," so TS forces a null check before `user.name` — exactly the runtime bug TS exists to prevent. With plain `useState(null)`, TS infers the state can *only* ever be null.
 
+### Props typing, walked through like you'd write it
+
+Add types one line at a time and narrate each step:
+
+```tsx
+// Step 1 — before: untyped, no safety (plain JS habits)
+//   function UserCard(props) { return <p>{props.name}</p>; }
+
+interface UserCardProps {          // Step 2 — name the shape once
+  name: string; age: number;
+  isActive?: boolean;              // ? = caller may skip it
+  onSelect: (id: number) => void;
+}
+function UserCard({ name, age, isActive = false, onSelect }: UserCardProps) { // Step 3
+  return <button onClick={() => onSelect(age)}>{name} — {age} {isActive ? "🟢" : "⚪"}</button>;
+}
+<UserCard name="Ayushi" age={21} onSelect={(id) => console.log(id)} /> // ✅ Step 4 — usage self-checks
+<UserCard name="Ayushi" age="21" onSelect={() => {}} />               // ❌ age must be number
+```
+
+You showed the *flow*: shape defined once, destructured props inherit it, and the JSX usage site gets checked for free. Mention `children: React.ReactNode` for wrappers and `React.ChangeEvent<HTMLInputElement>` for inputs — those two cover 90% of fresher React+TS questions.
+
+> [!WARNING]
+> **Common mistake:** typing props as `any` "just for now." The moment props are `any`, every typo compiles happily and fails for the user. The interface *is* the documentation your teammates read.
+
 **🎤 What the interviewer actually asks:** *"How do you type props?"*, *"How do you type useState for an object that starts as null?"*, *"How do you type an onChange handler?"*
 
 ## 📌 11. Utility Types (the four you must know)
@@ -226,6 +360,39 @@ type UserCard  = Pick<User, "name" | "age">;
 type NewUser   = Omit<User, "id">;         // id comes from the DB, not the form
 type Scores    = Record<string, number>;   // { "math": 90, "cs": 95 }
 ```
+
+One line each, with the moment you'd reach for it: `Partial<User>` → a settings form that PATCHes only touched fields; `Pick<User, "name" | "age">` → a compact card that should never receive the full User (and its email); `Omit<User, "id">` → a signup payload (the DB generates the id); `Record<string, number>` → `{ math: 90, cs: 95 }` marks-per-subject or feature-flag maps, keys and values both locked.
+
+> [!NOTE]
+> **Under the hood:** utility types are compile-time reshapers — `Partial`, `Pick`, `Omit`, `Record` all vanish in the emitted JavaScript. They exist purely so the checker can prove your shapes before anything runs.
+
+> [!WARNING]
+> **Common mistake:** reaching for `Partial` on a *required* create payload — `{ }` becomes a valid "user." Use `Partial` for updates, keep creates strict.
+
+## 📌 11B. Strict Mode — the safety net you should always name
+
+`"strict": true` in `tsconfig.json` turns on a family of extra checks. The one interviewers probe is **strictNullChecks**: with it ON, `null` and `undefined` are *not* assignable to every type — a variable typed `string` can never silently hold `null`.
+
+```ts
+// strictNullChecks: ON
+let username: string = "Ayushi";
+username = null;            // ❌ error — string does not include null
+
+let nickname: string | null = null; // ✅ say it in the type if null is possible
+if (nickname !== null) console.log(nickname.toUpperCase()); // narrowed, safe
+
+function findName(id: number): string | undefined {
+  return id === 1 ? "Ayushi" : undefined; // honest return type
+}
+const found = findName(9);
+console.log(found.length);       // ❌ error — found might be undefined
+console.log(found?.length ?? 0); // ✅ optional chain + fallback
+```
+
+Say it out loud: "Strict mode forces `| null` / `| undefined` into the type wherever missing values are real; narrowing then proves the value exists before use — the most common runtime crash becomes a compile-time error." Cousins: **noImplicitAny** (no silent `any` params) and **strictFunctionTypes** (safer callback checks) — naming strictNullChecks with the example above covers the fresher follow-up.
+
+> [!WARNING]
+> **Common mistake:** turning strict OFF to silence deadline errors. They were real bugs asking to be found early — disabling strict just moves them to production.
 
 ## 📌 12. Common Interview Traps
 

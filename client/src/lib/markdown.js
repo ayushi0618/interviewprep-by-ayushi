@@ -74,3 +74,62 @@ function transformInline(md, slugByFile) {
 export function renderMarkdown(md, slugByFile = {}) {
   return marked.parse(transformInline(transformCallouts(md), slugByFile));
 }
+
+// ---------------------------------------------------------------------------
+// splitSegments(md) — carve interactive blocks out of raw markdown BEFORE
+// rendering. Articles can embed three special fences:
+//   ```visual <name>          → { type:'visual', name }          (React visualizer)
+//   ```playground <title...>  → { type:'playground', title, code } (runnable JS)
+//   ```sql-playground <title> → { type:'sql', title, code }        (runnable SQL)
+// Everything else — including ```js / ```mermaid fences — stays inside
+// { type:'md', text } segments and is rendered later by renderMarkdown().
+// CRLF input is normalised, and an unclosed fence just runs to EOF.
+// ---------------------------------------------------------------------------
+export function splitSegments(md) {
+  const text = String(md ?? '').replace(/\r\n?/g, '\n');
+  const lines = text.split('\n');
+  const segments = [];
+  let mdLines = [];
+
+  const flushMd = () => {
+    const joined = mdLines.join('\n');
+    mdLines = [];
+    if (joined.trim()) segments.push({ type: 'md', text: joined });
+  };
+  const openFence = (line) => {
+    const m = line.match(/^\s{0,3}```(.*)$/);
+    return m ? m[1].trim() : null;
+  };
+  const isCloseFence = (line) => /^\s{0,3}```\s*$/.test(line);
+
+  let i = 0;
+  while (i < lines.length) {
+    const info = openFence(lines[i]);
+    if (info === null) { mdLines.push(lines[i]); i += 1; continue; }
+
+    const parts = info.split(/\s+/).filter(Boolean);
+    const kind = (parts[0] || '').toLowerCase();
+    const rest = parts.slice(1).join(' ');
+    const special = kind === 'visual' || kind === 'playground' || kind === 'sql-playground';
+
+    // Collect the fence body up to its closing ``` (or EOF if unclosed).
+    const body = [];
+    let j = i + 1;
+    while (j < lines.length && !isCloseFence(lines[j])) { body.push(lines[j]); j += 1; }
+    const closed = j < lines.length;
+
+    if (special) {
+      flushMd();
+      if (kind === 'visual') segments.push({ type: 'visual', name: rest.split(/\s+/)[0] || '' });
+      else if (kind === 'playground') segments.push({ type: 'playground', title: rest, code: body.join('\n') });
+      else segments.push({ type: 'sql', title: rest, code: body.join('\n') });
+    } else {
+      // Ordinary code fence — keep the whole block verbatim in the markdown.
+      mdLines.push(lines[i], ...body);
+      if (closed) mdLines.push(lines[j]);
+    }
+    i = closed ? j + 1 : j;
+  }
+  flushMd();
+  return segments;
+}

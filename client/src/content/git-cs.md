@@ -54,6 +54,64 @@ flowchart LR
 - **`.gitignore`** — a file listing things Git should never track, like `node_modules/`, `.env` (secrets!), and build folders.
 - **Pull Request (PR)** — a request on GitHub to merge your branch into another, so teammates can review, comment, and approve before the code lands.
 
+### 🌅 A day in the life — one feature, start to finish
+
+Say this out loud once and you will never fumble the "how do you work in a team?" question. You are adding a small "save mood" button to your project:
+
+1. **Morning sync:** you run `git pull` on `main`. Git prints `Already up to date.` (nothing new) or `Updating... Fast-forward` with the files that changed. You now have the team's latest code — never start work on stale code.
+2. **Make your own branch:** `git switch -c feature/save-mood` creates the branch and moves you onto it in one step. Git replies `Switched to a new branch 'feature/save-mood'`. Your work now cannot disturb `main`.
+3. **Code for a while,** then check yourself with `git status`. Git lists your changed files under `Changes not staged for commit:` — this is your safety check before every commit.
+4. **Stage only this feature:** `git add src/SaveMoodButton.jsx`. It prints nothing on success — silence means done. (`git add .` stages everything; fine for a solo project, risky in a team.)
+5. **Commit the snapshot:** `git commit -m "Add save mood button"`. Git replies `[feature/save-mood a3f9c1d] Add save mood button` plus `1 file changed...`. You now have a permanent, named checkpoint.
+6. **Push your branch:** `git push -u origin feature/save-mood` uploads the branch and prints a line like `Create a pull request for 'feature/save-mood'...` with a link. The `-u` links local and remote branch, so next time plain `git push` is enough.
+7. **Open the Pull Request** on GitHub: you describe what changed, a teammate reads the diff, comments, and approves. This review step is the whole point of branching — `main` only receives reviewed code.
+8. **Merge and clean up:** after merging on GitHub, you run `git switch main`, then `git pull` to bring the merge down, then `git branch -d feature/save-mood` to delete the finished branch. Git confirms `Deleted branch feature/save-mood`.
+
+> [!TIP]
+> If an interviewer asks "walk me through your Git workflow", narrate exactly these 8 steps. Branch → commit small → push → PR → review → merge. That *is* the professional workflow.
+
+**What you write in the PR (3 lines is enough):**
+
+- **What:** one line — "Adds a save-mood button on the result card."
+- **Why:** one line — "Users asked to revisit suggestions without re-entering their mood."
+- **How tested:** one honest line — "Tested locally: selected mood, saved, refreshed, entry persisted."
+
+A reviewer should understand your branch in 30 seconds without opening the code first. If they ask why a change exists, the PR answers — not your memory a week later.
+
+> [!NOTE]
+> Branch names carry meaning too: `feature/`, `fix/`, `chore/` prefixes (like `fix/login-redirect`) let a team scan a branch list and know the intent instantly. Small habit, very professional signal.
+
+### ⏪ Undo scenarios — which tool, and is it safe to share?
+
+Undoing is where freshers panic and type something dangerous. The rule is simple: **if the commit is already pushed and others may have it, only `revert` is safe.** Everything with `reset` rewrites history.
+
+| Your situation | Command | What actually happens | Safe on a shared branch? |
+|---|---|---|---|
+| You staged a file by mistake | `git restore --staged <file>` | File leaves the staging area; your edits stay untouched in the working directory | ✅ Yes — purely local, history untouched |
+| Undo last commit, keep the work | `git reset --soft HEAD~1` | Commit disappears, changes stay staged, ready to re-commit | ⚠️ Only if **not pushed yet** |
+| Undo last commit, throw work away | `git reset --hard HEAD~1` | Commit *and* your changes are deleted completely | ❌ Never after pushing; dangerous even locally |
+| Undo a commit already on GitHub | `git revert <hash>` | Creates a **new** commit that reverses the old one; history stays honest | ✅ Yes — this is the shared-branch-safe way |
+
+> [!WARNING]
+> `git reset --hard` is the one command that can delete real work with no recycle bin. In an interview, say: "I avoid `--hard` on anything pushed; for pushed commits I use `revert` because it doesn't rewrite history my teammates already have." That sentence alone signals senior-level caution.
+
+### ⚔️ Merge conflict walkthrough — what the scary markers mean
+
+A conflict just means: *two branches edited the same lines, and Git refuses to guess which version you want.* Git stops the merge, writes both versions into the file, and waits for you. Inside the file you will see:
+
+- A line starting with `<<<<<<< HEAD` — everything below it, down to the separator, is **your current branch's** version.
+- A line of `=======` — the divider between the two versions.
+- Everything below it down to `>>>>>>> feature/save-mood` — the **incoming branch's** version, with the branch name after the arrows.
+
+**Resolve it in 3 steps (always the same 3):**
+
+1. **Decide the final code:** open the file, keep the correct lines (sometimes yours, sometimes theirs, sometimes a mix), and delete all three marker lines. The file must read like normal code again — no markers left behind.
+2. **Mark it resolved:** run `git add <file>`. Staging the file is how you tell Git "this conflict is handled."
+3. **Finish the merge:** run `git commit` (Git pre-fills the merge message). Done — the merge completes with your chosen version.
+
+> [!NOTE]
+> Two escape hatches worth knowing: `git status` during a conflict lists files as `both modified` so you never guess which files are stuck, and `git merge --abort` cancels the whole merge and puts you back exactly where you were. Mentioning `--abort` tells the interviewer you stay calm under pressure.
+
 ### 🎤 Quick Q&A — Git
 
 **Q1. `git fetch` vs `git pull`?**
@@ -144,6 +202,23 @@ A **class** is a blueprint (e.g., `Car`); an **object** is a real instance built
 | **Abstraction** | Show only what's needed, hide complexity | You press the accelerator; you don't manage the engine's internals |
 | **Inheritance** | A child class reuses a parent's properties/methods | `ElectricCar` extends `Car` and inherits `drive()` |
 | **Polymorphism** | Same method name, different behaviour | `makeSound()` barks for `Dog`, meows for `Cat` |
+
+### 🏃 CS rapid answers — say the example, not just the definition
+
+Definitions get you a nod; a one-line story gets you the mark. Keep one concrete picture ready for each:
+
+- **Process vs Thread:** "Chrome and Spotify are two processes with separate memory; the many tabs inside Chrome are threads sharing Chrome's memory — one tab crashing doesn't kill the other app."
+- **Deadlock (the two-locks story):** "Thread A holds the database lock and waits for the cache lock. Thread B holds the cache lock and waits for the database lock. Neither can move — that's deadlock. You prevent it by making everyone take locks in the same order."
+- **Scheduling:** "Round Robin is a ticket counter giving each person exactly 2 minutes — nobody waits forever, everybody gets a turn."
+- **Virtual Memory:** "Your laptop has 8 GB RAM but you open apps needing 12 GB — the OS quietly parks the idle pages on disk and brings them back when needed. Disk pretends to be extra RAM."
+- **Normalization (the repeated-city fix):** "If 50 orders of one customer repeat the city 'Ghaziabad' on every row, fixing a spelling means editing 50 rows. In 3NF the city lives once in the customer row — one fix, done everywhere."
+- **ACID (one bank transfer says it all):** "Sending ₹500: Atomicity — debit and credit both happen or neither does. Consistency — balances stay valid. Isolation — my transfer doesn't mix with yours running at the same time. Durability — after success, a power cut can't erase it."
+- **Index:** "Finding 'Sharma' using a phone book's index takes seconds; without it you'd read every page. Indexes speed up reads, cost you a little on every write."
+- **TCP vs UDP (call vs download):** "A file download uses TCP — one missing chunk corrupts the file, so every packet must arrive in order. A live video call uses UDP — a late frame is useless, so it skips it and keeps the conversation live."
+- **DNS:** "You type `github.com`, DNS returns the server's IP — exactly like tapping a contact name instead of dialling the number from memory."
+
+> [!TIP]
+> Interview trick: answer the definition in one line, then say "for example..." and give the story above. Two lines total, then stop. That rhythm — definition, example, stop — is what "strong basics" sounds like.
 
 ---
 

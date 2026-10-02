@@ -106,3 +106,17 @@ body { @apply bg-[#f6f7f4] text-ink font-sans antialiased; }
 /* thin scrollbars for sidebar */
 .nice-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
 .nice-scroll::-webkit-scrollbar-thumb { @apply bg-brand-200 rounded-full; }
+
+/* ---------------------------------------------------------------
+   Interactive visualizers (client/src/components/visuals/*).
+   They render inside .article-body but manage their own spacing,
+   so neutralize the article's element margins within .viz-root,
+   and add a small pop-in for items that appear step-by-step.
+   --------------------------------------------------------------- */
+.viz-root p, .viz-root h3, .viz-root h4, .viz-root ul, .viz-root ol { margin: 0; }
+.viz-root ul, .viz-root ol { padding: 0; list-style: none; }
+@keyframes viz-pop {
+  from { opacity: 0; transform: translateY(5px) scale(.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.viz-pop { animation: viz-pop .28s ease both; }

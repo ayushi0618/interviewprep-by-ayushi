@@ -20,6 +20,21 @@ Three ideas make React what it is:
 > [!IMPORTANT]
 > The Virtual DOM is **not** faster than the real DOM by itself. Its power is that it lets *you* write simple declarative code while React does the minimum number of real DOM updates under the hood.
 
+**Watch one update run, step by step.** Say you click the button in the Counter example (Section 4) and `count` goes from 0 to 1:
+
+1. **Event:** your click calls `setCount(1)`. React makes a note: "this component's state changed — it needs to re-render."
+2. **Render:** React calls your component function again, top to bottom. This time `count` is `1`, so the function returns fresh JSX describing `<p>Count: 1</p>`.
+3. **Diff (reconciliation):** React compares the new virtual tree against the previous one, node by node. The `<div>` and `<button>` are unchanged; only the text inside `<p>` differs.
+4. **Commit:** React applies the *minimum* change to the real DOM — it updates just that one text node. The button, the div, everything else: untouched.
+5. **Effects:** only *now*, after the screen shows the new state, do any `useEffect` callbacks for this render run.
+
+Say it in an interview like this: *"State change → React re-runs the component → diffs old vs new virtual DOM → commits only the real changes → then runs effects."* Re-rendering does **not** mean rebuilding the page — it means re-running your function and letting the diff decide what (if anything) the real DOM needs.
+
+Try the live version:
+
+```visual render-counter
+```
+
 **What the interviewer asks:** "Why React over vanilla JS?"
 **Say this:** In vanilla JS, I have to manually track which DOM nodes to update when data changes — that gets messy fast. React lets me just describe the UI for each state, and it updates only what changed.
 
@@ -102,6 +117,31 @@ function Card({ children }) {
 </Card>
 ```
 
+**Lifting state up, in miniature** — when two children need the *same* data, the state moves up to their parent:
+
+```jsx
+function App() {
+  const [count, setCount] = useState(0); // state lives HERE, in the parent
+
+  return (
+    <div>
+      <Display value={count} />                    {/* child 1 just shows it */}
+      <AddButton onAdd={() => setCount(count + 1)} /> {/* child 2 asks the parent to change it */}
+    </div>
+  );
+}
+
+function Display({ value }) {
+  return <p>Count: {value}</p>;
+}
+
+function AddButton({ onAdd }) {
+  return <button onClick={onAdd}>Add</button>;
+}
+```
+
+Neither child owns `count`. `Display` receives it as a prop; `AddButton` receives a *function* as a prop and calls it — the parent updates its own state, and both children re-render with the new picture. Whenever two components must stay in sync, this is the pattern: find their closest common parent, and lift the state there.
+
 **What the interviewer asks:** "Can a child change the parent's data?"
 **Say this:** Not directly. The parent passes a callback function as a prop, the child calls it, and the parent updates its own state. That's called *lifting state up*.
 
@@ -146,6 +186,33 @@ setCount(prev => prev + 1);
 > [!WARNING]
 > **Classic trap:** `setCount(count + 1); setCount(count + 1);` in the same handler adds only **1**, not 2 — both calls read the same stale `count` from the current render. `setCount(prev => prev + 1)` twice adds 2, because each update receives the latest queued value.
 
+**Watch batching happen, with counts.** One click handler, two styles:
+
+```jsx
+function handleClick() {
+  setCount(count + 1); // reads count = 0 → queues "set state to 1"
+  setCount(count + 1); // reads count = 0 (still this render!) → queues "set state to 1"
+  setCount(count + 1); // reads count = 0 → queues "set state to 1"
+}
+// After the click: count is 1 — and the component re-rendered ONCE.
+```
+
+React **batches** the updates: it collects all three, processes them together after the handler finishes, then re-renders a single time. All three calls read the same `count` snapshot from *this* render (0), so all three ask for `1` — and `1` is what you get.
+
+```jsx
+function handleClick() {
+  setCount(prev => prev + 1); // receives latest queued value: 0 → 1
+  setCount(prev => prev + 1); // receives 1 → 2
+  setCount(prev => prev + 1); // receives 2 → 3
+}
+// After the click: count is 3 — still just ONE re-render.
+```
+
+Functional updates queue up like a pipeline: each one receives whatever the previous one produced. That's the whole trick — value updates read a stale snapshot, function updates read the queue.
+
+> [!NOTE]
+> **Under the hood:** since React 18, batching is automatic *everywhere* — inside promises, `setTimeout` callbacks, and native event handlers too, not just React's own event handlers. However many setters you call in one event, you get one re-render at the end.
+
 ### Updating objects and arrays — immutably
 
 Never mutate state directly. Create a *new* object/array so React can detect the change (React compares references — same object in memory = "nothing changed" = no re-render).
@@ -166,6 +233,35 @@ setItems(items.map(i => i.id === id ? { ...i, done: true } : i)); // update one
 
 **What the interviewer asks:** "Why not just do `count++` and set it?"
 **Say this:** Because mutating state directly doesn't reliably trigger a re-render — React decides to re-render when the setter is called with a new value/reference. Mutation breaks that contract and causes stale UI bugs.
+
+Simulate the queue yourself (plain JavaScript, same idea as React's):
+
+```playground Simulate React state batching
+// A tiny simulation of React's update queue
+let state = 0;
+const queue = [];
+function setState(update) { queue.push(update); } // queued, not applied instantly
+
+function flushQueue() {
+  for (const update of queue) {
+    if (typeof update === "function") {
+      // TODO: apply the updater to current state — state = update(state)
+    } else {
+      state = update; // a plain value replaces the state
+    }
+  }
+  queue.length = 0;
+  return state;
+}
+
+setState(state + 1);
+setState(state + 1);
+console.log("value updates give:", flushQueue()); // 1 — both read the same old state
+state = 0; // reset
+setState(prev => prev + 1);
+setState(prev => prev + 1);
+console.log("function updates give:", flushQueue()); // goal: 2, once the TODO works
+```
 
 ---
 
@@ -192,6 +288,24 @@ const bills = [
 ### Why using the array index as key is risky
 
 If the list never changes order, index keys *work*. But if items can be **deleted, inserted, or reordered**, React matches items by position instead of identity — so input text, checkbox state, or component state can jump to the wrong row, and reordering becomes slow because React re-renders everything instead of moving nodes.
+
+**See it happen — the reorder demo.** Imagine each row has its own internal state (a ticked checkbox, text typed into a row input). With *index* keys:
+
+```
+Render 1:                     You tick the checkbox on "Pay rent" (row 0).
+  [0] Pay rent   ☑   ← the tick lives at POSITION 0
+  [1] Buy milk   ☐
+  [2] Call mom   ☐
+
+You delete "Pay rent". React matches by position:
+  [0] Buy milk   ☑   ← the tick has jumped onto Buy milk!
+  [1] Call mom   ☐
+```
+
+React reused position 0's DOM and component state for what is now a *different item* — the state stuck to the **position**, not the item. With real ID keys (`key={item.id}`), React tracks identity instead: deleting "Pay rent" removes *its* row and *its* state, and "Buy milk" keeps its own unticked box.
+
+> [!WARNING]
+> **Common mistake:** `key={Math.random()}` or generating any fresh key on each render. Every key changes → React concludes every item is brand new → it destroys and rebuilds the entire list on each render, wiping row state and wasting work. A key must be *stable*: same item, same key, every render.
 
 **What the interviewer asks:** "Is index as key always wrong?"
 **Say this:** No — it's fine for a static list that never reorders or filters. If the list is dynamic, use a real ID; index keys attach state to the *position*, not the *item*, which creates bugs on delete/reorder.
@@ -239,6 +353,18 @@ function LoginForm() {
 }
 ```
 
+**What happens on every single keystroke** — say you type `a` into that email box:
+
+1. You press the key. The browser wants to display `a` in the input.
+2. `onChange` fires, carrying `e.target.value === "a"`.
+3. `setEmail("a")` runs → state changes → the component re-renders.
+4. The re-rendered JSX says `value={email}`, and `email` is now `"a"` — so the input shows `a`.
+
+The input never owns its text: React state owns it, and the input just reflects it. That's why a controlled input *cannot* display a character your state rejects — if `onChange` chooses not to update state (say you're filtering out digits), the re-render forces the input back to the old state value, and the forbidden character simply never appears. Total control, at the price of one re-render per keystroke — completely fine at form scale.
+
+> [!WARNING]
+> **Common mistake:** giving an input a `value` prop but forgetting `onChange`. React treats it as read-only, logs a console warning, and the user types while *nothing happens*. If you truly want a fixed starting value the user edits freely, use an uncontrolled input with `defaultValue` instead.
+
 Why controlled? Because then you can validate as the user types, disable the submit button until valid, format input, or submit the state value directly — no need to query the DOM.
 
 **What the interviewer asks:** "Controlled vs uncontrolled?"
@@ -269,6 +395,23 @@ useEffect(() => {
 | **Empty array**: `useEffect(fn, [])` | Once, after the **first** render only |
 | **With values**: `useEffect(fn, [userId])` | First render + whenever any listed value **changes** |
 
+**How React decides whether to re-run your effect** — watch three renders:
+
+```jsx
+const [userId, setUserId] = useState(1);
+const [name, setName] = useState("");
+
+useEffect(() => {
+  console.log("effect ran for user", userId);
+}, [userId]);
+```
+
+1. **First render:** `userId = 1`, `name = ""`. After the screen paints, React runs the effect (the first render *always* runs it) → logs `effect ran for user 1`. React quietly saves the deps it saw: `[1]`.
+2. **You type in the name field:** `setName("A")` triggers a re-render. React compares the new deps `[1]` against the saved `[1]`, element by element (using `Object.is`). Identical → **effect skipped**. Nothing logs.
+3. **You switch user:** `setUserId(2)` triggers a re-render. New deps `[2]` vs saved `[1]` — different → the cleanup (if any) runs first, then the effect runs → logs `effect ran for user 2`. Saved deps become `[2]`.
+
+So the dependency array isn't magic — it's simply a list React compares, item by item, against the previous render's list. This is also why putting a fresh object or array literal in the deps (`[{ id: 1 }]`) breaks the system: a newly created object is never `Object.is`-equal to last render's, so the effect re-runs on *every* render.
+
 ### Cleanup
 
 If your effect starts something, it should stop it. Return a function from the effect — React runs it before the next effect run and when the component unmounts.
@@ -279,6 +422,14 @@ useEffect(() => {
   return () => clearInterval(id); // cleanup — no leaked timer
 }, []);
 ```
+
+**Watch cleanup save you from a doubled timer:**
+
+1. The component mounts → the effect runs → interval #1 starts ticking once per second.
+2. You navigate away → the component unmounts → React runs the cleanup → `clearInterval` kills interval #1. Silence. ✅
+3. **Without** that returned cleanup function: the interval survives the component, logging forever from a page that no longer exists — and every remount adds *another* interval. Two mounts later you get three "tick"s per second plus a memory leak.
+
+The same story applies to event listeners (`removeEventListener`), subscriptions, and fetches (the `AbortController` in Section 12): cleanup simply means *"undo whatever the effect started."*
 
 ```mermaid
 flowchart TD
@@ -320,6 +471,36 @@ useEffect(() => {
 }, [userId]); // ✅ runs on mount + when userId changes
 ```
 
+**The stale closure trap** — the sneakiest effect bug, and pure JavaScript closures underneath:
+
+```jsx
+function Ticker() {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      console.log("count is", count); // logs 0 forever!
+      setCount(count + 1);
+    }, 1000);
+    return () => clearInterval(id);
+  }, []); // ← empty deps
+```
+
+`count` goes 0 → 1 on the first tick… and the log says `0` forever after. Why? The effect ran **once** (empty deps), so the interval callback *closed over* the `count` from the very first render — `0` — and never sees a newer one. Every render creates fresh variables; an effect with `[]` keeps using the first render's snapshot.
+
+**Fix:** use the functional update so the callback never needs the current `count` at all:
+
+```jsx
+useEffect(() => {
+  const id = setInterval(() => {
+    setCount(prev => prev + 1); // always builds on the latest value
+  }, 1000);
+  return () => clearInterval(id);
+}, []); // ✅ now the empty deps are genuinely safe
+```
+
+If you truly need to *read* the latest `count` inside, add it to the dependency array instead (the interval restarts on each change) — but the functional update is the cleaner answer, and naming "stale closure" out loud scores points.
+
 > [!WARNING]
 > Two more effect traps interviewers test:
 > 1. **Missing dependency** — using `userId` inside the effect but not listing it → stale data when the ID changes. Always list every reactive value you use.
@@ -327,6 +508,29 @@ useEffect(() => {
 
 > [!TIP]
 > If an interviewer asks "can I make the effect callback `async` directly?" — the answer is **no**, because an async function returns a Promise, but React expects either nothing or a cleanup function. Define an async function *inside* the effect and call it.
+
+Simulate the dependency check yourself:
+
+```playground Simulate effect dependencies
+// Simulating how React decides whether an effect re-runs
+let prevDeps = null; // the deps React saved from the previous render
+
+function renderAndMaybeRunEffect(userId, note) {
+  const deps = [userId];
+  const changed =
+    prevDeps === null ||
+    deps.some((dep, i) => dep !== prevDeps[i]);
+  console.log(note, "| effect runs?", changed);
+  // TODO: when changed, also log "  fetching user " + userId —
+  // and make sure prevDeps is saved for the next render either way
+  prevDeps = deps;
+}
+
+renderAndMaybeRunEffect(1, "mount");
+renderAndMaybeRunEffect(1, "typed a letter (re-render)");
+renderAndMaybeRunEffect(1, "typed some more (re-render)");
+renderAndMaybeRunEffect(2, "switched user");
+```
 
 ---
 
@@ -363,6 +567,23 @@ timerRef.current = setTimeout(() => {}, 1000); // no re-render happens
 | Changing it does NOT re-render | Changing it re-renders |
 | Value available instantly after change | New value available on next render |
 | Good for DOM refs, timer IDs, previous values | Good for anything shown in the UI |
+
+**Worked example — remembering the previous value** (a classic interview follow-up, built from exactly the two properties above):
+
+```jsx
+function PriceTag({ price }) {
+  const prevPriceRef = useRef(null);
+
+  useEffect(() => {
+    prevPriceRef.current = price; // save AFTER render, so during render it still holds the old value
+  }, [price]);
+
+  const prev = prevPriceRef.current;
+  return <p>₹{price} {prev !== null && `(was ₹${prev})`}</p>;
+}
+```
+
+Watch it run: first render, `prevPriceRef.current` is `null`, so only `₹100` shows; the effect then stores `100`. Price changes to `120` → during this render the ref *still* holds `100`, so the UI shows `₹120 (was ₹100)`; the effect then stores `120` for next time. The trick works precisely because writing to a ref does not re-render — the new value waits quietly until the next render reads it.
 
 **What the interviewer asks:** "Why not store the timer ID in state?"
 **Say this:** Because changing state re-renders the component, and the timer ID isn't UI data — re-rendering for it would be wasteful. Refs are for values you need to *remember* but not *display*.
@@ -550,6 +771,9 @@ Key ideas a fresher should know:
 - **`React.memo`** — wraps a component so it skips re-rendering if its props are unchanged: `const Card = React.memo(function Card(props) { ... })`. Useful for heavy list items; useless if props are new objects/functions every render (that's where `useCallback`/`useMemo` come in).
 - **Stable keys** — changing keys (like `key={Math.random()}`) force React to destroy and rebuild DOM nodes instead of updating them. Expensive and state-destroying.
 - **Keep state low** — state that lives in a small child re-renders only that child. Lifting state to the top of the app makes every keystroke re-render everything below it.
+
+> [!NOTE]
+> **Under the hood:** a "re-render" is just React calling your function again and comparing virtual trees — it does **not** touch the real DOM unless the diff finds a change. That's why re-rendering is cheap, and why experienced React developers say "let it re-render; optimise only when you can *measure* the slowness." The genuinely expensive mistake isn't re-rendering — it's creating new object/array/function props on every render, which silently defeats `React.memo` and dependency checks downstream.
 
 > [!NOTE]
 > Interview one-liner for `React.memo`: "It memoises the component — if props haven't changed, React reuses the last rendered output instead of re-rendering."

@@ -25,3 +25,24 @@ export const VERDICT_STYLES = {
   Shaky: 'bg-amber-100 text-amber-800 border-amber-300',
   Missed: 'bg-red-100 text-red-700 border-red-300',
 };
+
+// Live Interview grading: a friendlier band (Strong / Good / Needs work)
+// over the same two signals — keyword coverage against the model answer,
+// and whether the answer was long enough to judge. Returns everything the
+// report card renders: band, 0–100 score, hit/missed keywords, word count.
+export function scoreInterviewAnswer(transcript, item, { skipped = false, hintUsed = false } = {}) {
+  const { words, coverage, hitKeywords, missedKeywords } = scoreAnswer(transcript, item);
+  const score = skipped ? 0 : Math.round(coverage * 70 + Math.min(words / 40, 1) * 30);
+  let band;
+  if (skipped || words < 8) band = 'Needs work';
+  else if (score >= 65 && words >= 12) band = 'Strong';
+  else if (score >= 38) band = 'Good';
+  else band = 'Needs work';
+  return { band, score, words, coverage, hitKeywords, missedKeywords, hintUsed, skipped };
+}
+
+export const BAND_STYLES = {
+  Strong: 'bg-brand-100 text-brand-800 border-brand-300',
+  Good: 'bg-amber-100 text-amber-800 border-amber-300',
+  'Needs work': 'bg-red-100 text-red-700 border-red-300',
+};
