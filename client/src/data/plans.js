@@ -151,11 +151,12 @@ function dsaProblemChapters() {
     'linked-list': ['reverse-linked-list', 'merge-two-sorted-lists', 'linked-list-cycle', 'middle-linked-list'],
     'stack-queue': ['valid-parentheses', 'next-greater-element', 'daily-temperatures'],
     trees: ['max-depth', 'invert-binary-tree', 'level-order-traversal', 'diameter-binary-tree'],
+    heap: ['last-stone-weight', 'task-scheduler', 'k-closest-points'],
     graphs: ['number-of-islands', 'flood-fill', 'rotting-oranges'],
     dp: ['climbing-stairs', 'house-robber', 'coin-change', 'longest-increasing-subsequence'],
   };
   for (const topic of DSA_TOPIC_ORDER) {
-    for (const id of canonical[topic]) {
+    for (const id of canonical[topic] || []) {
       if (!placed.has(id)) {
         idsByTopic[topic].push(id);
         placed.add(id);
