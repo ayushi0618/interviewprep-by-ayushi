@@ -1,73 +1,81 @@
-# 🎤 InterviewPrep by Ayushi Singh
+# 🎤 InterviewPrep — by Ayushi Singh
 
-A GeeksforGeeks-style interview-preparation website: full-stack notes that read like highlighted paper notes, timed flash-card practice, and a **live AI mock-interview room** (camera + voice) that asks you questions out loud, follows up on your answers, and grades you at the end.
+**I built this for myself first. Then I realised every student around me was preparing the same messy way — so I made it for everyone.**
 
-Built from my own interview preparation — every note is written the way you'd explain it *out loud* in an interview.
+While preparing for my own full-stack interviews, my notes were scattered across notebooks, screenshots, random tabs and half-finished docs. Revise one topic, forget where I wrote the next. So I sat down and built the thing I actually wanted: **one website where my notes live like real highlighted paper notes, where I can practise questions against a timer, and where an AI interviewer talks to me on camera and grades my answers.**
 
-## ✨ Features
+If you're a student or fresher preparing for full-stack / SDE interviews — **please use it. It's free, it's public, and it's yours as much as mine.** If it helps you crack even one interview question, it did its job. ⭐ Star it so other students find it.
 
-- **📚 Notes library** — 12 topic guides with a sticky sidebar: JavaScript, React, Backend (Node/Express/APIs/DB), DSA, TypeScript, Next.js, SQL Deep-Dive, System Design for Freshers, Git & CS Fundamentals, HTML/CSS, Project Explainers + HR, and a Full Mock Bank with a 7-day plan
-- **📝 "Paper notes" rendering** — warm paper cards, colored highlight boxes (Note / Tip / Important / Warning), comparison tables, diagram cards, dark code blocks with copy buttons, collapsible solutions, and paper checkboxes for revision checklists
-- **🔍 Search** — filter topics *and* individual mock questions from the navbar
-- **🎴 Practice mode** — pick a topic deck, answer out loud against a 60-second timer, reveal the model answer, rate yourself (Knew it / Shaky / Missed), and get a score summary with "revise these" links; progress is saved in your browser
-- **🎥 Live AI Interview room** — camera/mic preview (never recorded or uploaded), the interviewer *speaks* questions (text-to-speech), you answer by voice (speech-to-text in Chrome/Edge) or typing, and at the end you get a per-question rubric, keyword gaps, model answers, and a full transcript
-- **📱 Responsive** — desktop-first multi-column layout that stacks cleanly on mobile
+🔗 **Live website:** https://interviewprep-by-ayushi.onrender.com
 
-## 🧠 How the AI interviewer works
+---
 
-`POST /api/interview` (Express) has two brains:
+## ✨ What you get
 
-1. **Gemini mode** — if `GEMINI_API_KEY` is set, Gemini improvises follow-ups and feedback, anchored to the same question bank so scoring still works. Any API failure quietly falls back to scripted mode for that turn.
-2. **Scripted mode** — a deterministic ladder with **no key required**: intro → 5 bank questions (up to 2 follow-ups each) → closing, with keyword-based feedback. If the API call itself ever fails, the frontend runs the same ladder locally — so the room *always* works.
+📚 **Notes that read like notes** — 12 topics written the way I explain things to myself: definitions in highlighted boxes, comparison tables, code examples, the traps interviewers love, and a mock-question list with answers you can actually *say out loud* at the end of every topic.
 
-Scoring is deliberately simple and explainable: answer length + keyword coverage against the model answer → Knew it / Shaky / Missed.
+🎯 **Practice mode** — pick a topic, get timed question cards, rate yourself honestly (Knew it / Shaky / Missed), and watch your score history improve. 119 questions and counting.
 
-## 🛠️ Stack
+🤖 **Live AI mock interview** — this is my favourite part. Turn your camera on, the interviewer *speaks* a question out loud, you answer with your voice, it follows up on what you said — and at the end you get a report card: what you covered, what you missed, and which topics to revise. Nothing is recorded or uploaded; your camera is only a mirror. Practise at 2 AM, no senior required.
 
-- **Frontend:** React 18, Vite, Tailwind CSS, `marked` (markdown → HTML with custom callout/diagram transforms)
-- **Backend:** Node.js + Express (serves the built site + the interview API)
-- **Speech:** Web Speech API (`speechSynthesis` + `SpeechRecognition`) — no external services
-- **Content:** each topic is a markdown file in `client/src/content/`; the practice question bank is generated from those files by `scripts/extract-bank.mjs`
+---
 
-## 🚀 Run it
+## 📖 Topics covered
+
+| Topic | What's inside |
+|---|---|
+| ⚡ JavaScript | Types & traps, closures, promises, event loop, output puzzles |
+| ⚛️ React | Hooks done properly, `useEffect`, bug hunting, performance |
+| 🖥️ Backend | Node.js, Express, REST, JWT, MongoDB vs SQL, status codes |
+| 🧩 DSA | Big-O, patterns (two pointers, sliding window…), complexity tables |
+| 🔷 TypeScript | Types, generics, narrowing, TS with React |
+| ▲ Next.js | SSR/SSG/CSR, routing, when Next beats plain React |
+| 🗄️ SQL | Joins, grouping, subqueries + 10 practice queries with solutions |
+| 🏗️ System Design | Fresher-friendly walkthroughs: URL shortener, chat app, scaling basics |
+| 🌿 Git & CS Fundamentals | Git commands, OS, DBMS, networks, OOP — 30-second answers |
+| 🎨 HTML & CSS | Box model, flexbox vs grid, the rapid-fire questions |
+| 🎯 My Projects + HR | How I explain my own projects, honest HR answers |
+| 📅 Full Mock Bank | A 45-minute timed mock + 7-day revision plan |
+
+---
+
+## 🚀 Use it your way
+
+**Just open the live site** — no signup, nothing to install: https://interviewprep-by-ayushi.onrender.com
+
+**Run it locally** (or fork it and make it yours):
 
 ```bash
-npm install            # server deps
-npm run install:client # frontend deps
-npm run build          # builds the client into client/dist
-npm start              # Express serves everything
+git clone https://github.com/ayushi0618/interviewprep-by-ayushi.git
+cd interviewprep-by-ayushi
+npm install
+npm install --prefix client
+npm run build
+npm start        # http://localhost:10000 (or your PORT)
 ```
 
-Open the URL it prints (default port 3002, override with `PORT`).
+**Optional — smarter AI interviewer:** the live mock interview works fully on its own, but if you add a `GEMINI_API_KEY` in a `.env` file, the interviewer generates its follow-up questions with AI instead of the built-in set:
 
-For local development with hot reload:
-
-```bash
-npm run dev   # Vite on 5174 (proxies /api) + Express on 3002
 ```
-
-### Optional: AI interviewer
-
-Copy `.env.example` to `.env` and add your key:
-
-```bash
 GEMINI_API_KEY=your_key_here
 ```
 
-Without it, everything — including the live interview room — still works in scripted mode.
+---
 
-### Regenerating the question bank
+## 🛠️ Built with
 
-After editing any file in `client/src/content/`:
+React 18 · Vite · Tailwind CSS · Express · the browser's own voice & camera APIs (Speech Recognition + Speech Synthesis) · optional Google Gemini · deployed on Render
 
-```bash
-node scripts/extract-bank.mjs   # rewrites client/src/data/bank.json
-```
+## 🤝 For students, by a student
 
-## ✍️ Author
+Found a topic missing? An explanation that could be simpler? A question an interviewer asked you that's not here? Open an issue or a PR — the whole point of putting this up is that it keeps getting better for the next person. My only request: keep explanations simple enough to say out loud to a friend. That's the rule I wrote every note by.
 
-**Ayushi Singh** — final-year B.Tech CSE student (AKTU, Ghaziabad), MERN-stack developer.
+## 👩‍💻 About me
 
-[LinkedIn](https://www.linkedin.com/in/ayushi0618/) · [Portfolio](https://ayushi-tech-06181.vercel.app) · [GitHub](https://github.com/ayushi0618)
+I'm **Ayushi Singh**, a final-year B.Tech CSE student (AKTU, Ghaziabad) graduating in April 2027. I build full-stack products with React, Node.js and TypeScript — Food for Mood AI, DSA Daily Coach, Trishul and UrjaSetu are mine — and I interned at Army Base Workshop, Meerut. This site started as my personal interview prep; it's now my gift to anyone preparing alongside me.
 
-*Good luck — go get the offer.* 🚀
+🔗 [LinkedIn](https://www.linkedin.com/in/ayushi0618/) · [Portfolio](https://ayushi-tech-06181.vercel.app) · [GitHub](https://github.com/ayushi0618)
+
+---
+
+*Prepare well, speak your answers out loud, and go get that offer. Good luck — I'm rooting for you.* 🚀
