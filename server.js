@@ -357,33 +357,59 @@ async function geminiNext(payload) {
     transcript || '(interview just started)',
   ].filter(Boolean).join('\n');
 
-  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 15000);
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      signal: ctrl.signal,
-    });
-    if (!res.ok) throw new Error(`gemini ${res.status}`);
-    const data = await res.json();
-    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
-    if (!parsed.text) throw new Error('empty gemini text');
-    return {
-      ...base,
-      text: String(parsed.text),
-      feedback: parsed.feedback ? String(parsed.feedback) : base.feedback,
-      aiUsed: true,
-    };
-  } finally {
-    clearTimeout(timer);
+  // Same model-fallback chain as the session interviewer: a retired model
+  // name must degrade to the next current model, not to the scripted turn.
+  const models = [...new Set([
+    process.env.GEMINI_MODEL,
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-flash-latest',
+  ].filter(Boolean))];
+  let lastError = null;
+  for (const model of models) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        signal: ctrl.signal,
+      });
+      if (!res.ok) {
+        const detail = (await res.text().catch(() => '')).slice(0, 200).replace(/\s+/g, ' ');
+        throw new Error(`gemini ${res.status} on ${model}: ${detail}`);
+      }
+      const data = await res.json();
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+      if (!parsed.text) throw new Error('empty gemini text');
+      return {
+        ...base,
+        text: String(parsed.text),
+        feedback: parsed.feedback ? String(parsed.feedback) : base.feedback,
+        aiUsed: true,
+      };
+    } catch (e) {
+      lastError = e;
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  throw lastError || new Error('gemini unavailable');
 }
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, ai: !!process.env.GEMINI_API_KEY }));
+// Liveness probe for the AI: key presence (ai) is not proof the model
+// answers, so health also reports aiLive from a real (cached) probe call.
+let aiLive = null;
+async function refreshAiProbe() {
+  try { aiLive = await interviewSessionsRouter.probeAi(); }
+  catch { aiLive = false; }
+  setTimeout(refreshAiProbe, 10 * 60 * 1000).unref?.();
+}
+refreshAiProbe();
+
+app.get('/api/health', (_req, res) => res.json({ ok: true, ai: !!process.env.GEMINI_API_KEY, aiLive }));
 
 app.post('/api/interview', async (req, res) => {
   const payload = {
