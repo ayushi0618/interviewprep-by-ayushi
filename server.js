@@ -357,43 +357,50 @@ async function geminiNext(payload) {
     transcript || '(interview just started)',
   ].filter(Boolean).join('\n');
 
-  // Same model-fallback chain as the session interviewer: a retired model
-  // name must degrade to the next current model, not to the scripted turn.
+  // Same model chain as the session interviewer: current Flash models
+  // only, retrying transient 429/5xx overload spikes with backoff.
   const models = [...new Set([
     process.env.GEMINI_MODEL,
     'gemini-2.5-flash',
-    'gemini-2.0-flash',
+    'gemini-2.5-flash-lite',
     'gemini-flash-latest',
   ].filter(Boolean))];
   let lastError = null;
   for (const model of models) {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 20000);
-    try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-        signal: ctrl.signal,
-      });
-      if (!res.ok) {
-        const detail = (await res.text().catch(() => '')).slice(0, 200).replace(/\s+/g, ' ');
-        throw new Error(`gemini ${res.status} on ${model}: ${detail}`);
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 30000);
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+          signal: ctrl.signal,
+        });
+        if (!res.ok) {
+          const detail = (await res.text().catch(() => '')).slice(0, 200).replace(/\s+/g, ' ');
+          const err = new Error(`gemini ${res.status} on ${model}: ${detail}`);
+          err.status = res.status;
+          throw err;
+        }
+        const data = await res.json();
+        const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+        if (!parsed.text) throw new Error('empty gemini text');
+        return {
+          ...base,
+          text: String(parsed.text),
+          feedback: parsed.feedback ? String(parsed.feedback) : base.feedback,
+          aiUsed: true,
+        };
+      } catch (e) {
+        lastError = e;
+        const transient = e.status === 429 || e.status === 500 || e.status === 503 || e.name === 'AbortError';
+        if (!transient || attempt === 3) break;
+        await new Promise((r) => setTimeout(r, 1000 * attempt + 500));
+      } finally {
+        clearTimeout(timer);
       }
-      const data = await res.json();
-      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
-      if (!parsed.text) throw new Error('empty gemini text');
-      return {
-        ...base,
-        text: String(parsed.text),
-        feedback: parsed.feedback ? String(parsed.feedback) : base.feedback,
-        aiUsed: true,
-      };
-    } catch (e) {
-      lastError = e;
-    } finally {
-      clearTimeout(timer);
     }
   }
   throw lastError || new Error('gemini unavailable');
