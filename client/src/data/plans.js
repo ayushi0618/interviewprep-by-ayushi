@@ -40,7 +40,7 @@ const task = (label, ref, meta) => ({ label, type: 'task', ref, ...(meta ? { met
 const DSA_TOPIC_ORDER = [
   'arrays', 'strings', 'hashing', 'two-pointers', 'sliding-window',
   'binary-search', 'sorting', 'linked-list', 'stack-queue', 'trees',
-  'graphs', 'dp',
+  'heap', 'graphs', 'dp',
 ];
 
 const DSA_TOPIC_TITLES = {
@@ -54,6 +54,7 @@ const DSA_TOPIC_TITLES = {
   'linked-list': 'Linked List',
   'stack-queue': 'Stack & Queue',
   trees: 'Trees',
+  heap: 'Heap & Priority Queue',
   graphs: 'Graphs',
   dp: 'Dynamic Programming',
 };
@@ -508,7 +509,7 @@ const RAW_PLANS = [
 
   {
     id: 'dsa-75',
-    title: 'DSA 75',
+    title: 'DSA 115',
     emoji: '🧩',
     tagline: 'Every sheet problem, pattern first — approach before code.',
     color: 'brand',

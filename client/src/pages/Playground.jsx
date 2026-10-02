@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSandboxRunner, LEVEL_CLASS } from '../lib/runCode';
 import { loadSqlJs, createSeededDb, SEED_COLUMNS, SEED_ROWS } from '../lib/sqlEngine';
 import { ONLINE_LANGUAGES, getOnlineLanguage, executeOnline, onlineErrorMessage } from '../lib/onlineRunner';
+import CodeEditor from '../components/CodeEditor';
 
 // Code Playground — a full-page "online compiler" for the notes.
 //   JavaScript mode → shared sandbox runner (lib/runCode.js): write JS,
@@ -198,48 +199,6 @@ SELECT * FROM students WHERE id = 11;`,
   },
 ];
 
-// Editor with a line-number gutter. The gutter is a plain div whose
-// scrollTop we sync with the textarea's — no editor library needed.
-// Tab inserts two spaces instead of moving focus.
-function CodeEditor({ value, onChange, onRunShortcut, ariaLabel }) {
-  const gutterRef = useRef(null);
-  const lineCount = value.split('\n').length;
-
-  const handleKeyDown = (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); onRunShortcut?.(); return; }
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const el = e.target;
-      const start = el.selectionStart;
-      const next = value.slice(0, start) + '  ' + value.slice(el.selectionEnd);
-      onChange(next);
-      // Restore the caret just after the inserted spaces.
-      requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = start + 2; });
-    }
-  };
-
-  return (
-    <div className="flex bg-slate-900 font-mono text-[0.85rem] leading-[1.6]">
-      <div ref={gutterRef} aria-hidden="true"
-        className="select-none overflow-hidden py-4 pl-3 pr-2 text-right text-slate-500 border-r border-white/5">
-        {Array.from({ length: lineCount }, (_, i) => (
-          <div key={i}>{i + 1}</div>
-        ))}
-      </div>
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onScroll={(e) => { if (gutterRef.current) gutterRef.current.scrollTop = e.target.scrollTop; }}
-        spellCheck={false}
-        wrap="off"
-        aria-label={ariaLabel}
-        className="h-[430px] flex-1 resize-y bg-transparent p-4 pl-3 text-slate-100 outline-none"
-      />
-    </div>
-  );
-}
-
 export default function Playground() {
   const [lang, setLang] = useState('js'); // 'js' | 'sql' | an ONLINE_LANGUAGES id
 
@@ -343,6 +302,12 @@ export default function Playground() {
   };
 
   const onlineLang = getOnlineLanguage(lang);
+  // Shared CodeMirror editor language for the current mode ('c' reuses
+  // the C++ grammar — same highlighting family, no separate C mode).
+  const editorLanguage =
+    lang === 'js' ? 'javascript' : lang === 'sql' ? 'sql' : lang === 'c' ? 'cpp' : lang;
+  const editorLabel =
+    lang === 'js' ? 'main.js' : lang === 'sql' ? 'query.sql' : onlineLang.file;
   const snippets = lang === 'js' ? JS_SNIPPETS : lang === 'sql' ? SQL_SNIPPETS : onlineLang.snippets;
   const activeSnippet = lang === 'js'
     ? jsSnippet
@@ -448,11 +413,13 @@ export default function Playground() {
             onChange={lang === 'js' ? setJsCode : lang === 'sql' ? setSqlCode : (v) => setOnlineCode((m) => ({ ...m, [lang]: v }))}
             onRunShortcut={lang === 'js' ? () => runner.run(jsCode) : lang === 'sql' ? runSql : runOnline}
             ariaLabel={lang === 'js' ? 'JavaScript code editor' : lang === 'sql' ? 'SQL query editor' : `${onlineLang.label} code editor`}
+            language={editorLanguage}
+            label={editorLabel}
           />
 
           {onlineLang && (
-            <div className="border-t border-white/10 bg-slate-900 px-4 py-3">
-              <label htmlFor="pg-stdin" className="text-[0.7rem] font-bold uppercase tracking-[0.12em] text-slate-400">
+            <div className="border-t border-brand-100 bg-brand-50/60 px-4 py-3">
+              <label htmlFor="pg-stdin" className="text-[0.7rem] font-bold uppercase tracking-[0.12em] text-slate-500">
                 stdin — input your program reads (one value per line)
               </label>
               <textarea
@@ -462,7 +429,7 @@ export default function Playground() {
                 rows={3}
                 spellCheck={false}
                 placeholder={'e.g.\nAyushi\n21'}
-                className="mt-2 w-full resize-y rounded-lg border border-white/10 bg-slate-950 px-3 py-2 font-mono text-[0.85rem] text-slate-100 outline-none placeholder:text-slate-600 focus:border-brand-400"
+                className="mt-2 w-full resize-y rounded-lg border border-brand-200 bg-white px-3 py-2 font-mono text-[0.85rem] text-slate-800 outline-none placeholder:text-slate-400 focus:border-brand-400"
               />
             </div>
           )}

@@ -1,7 +1,12 @@
 // dsaSheet.js — DSA Sheet problem bank for InterviewPrep by Ayushi.
-// 41 hand-authored problems across 12 topics. Each problem carries its own
-// statement, examples, hints, explanation, reference solution and tests.
-// Tests are proven by scripts/verify-sheet.mjs against judgeCore semantics.
+// 90 problems across 13 topics: the 50 hand-authored problems below plus
+// 40 more in dsaExtra1.js / dsaExtra2.js, merged into PROBLEMS. Each
+// problem carries its own statement, examples, hints, explanation,
+// reference solution and tests — all proven by scripts/verify-sheet.mjs
+// against judgeCore semantics.
+
+import { EXTRA_PROBLEMS } from './dsaExtra1.js';
+import { PROBLEMS_EXTRA2 } from './dsaExtra2.js';
 
 export const DSA_TOPICS = [
   { id: 'arrays', title: 'Arrays', emoji: '🔢' },
@@ -14,11 +19,12 @@ export const DSA_TOPICS = [
   { id: 'linked-list', title: 'Linked List', emoji: '🔗' },
   { id: 'stack-queue', title: 'Stack & Queue', emoji: '📚' },
   { id: 'trees', title: 'Trees', emoji: '🌳' },
+  { id: 'heap', title: 'Heap & Priority Queue', emoji: '⛰️' },
   { id: 'graphs', title: 'Graphs', emoji: '🕸️' },
   { id: 'dp', title: 'Dynamic Programming', emoji: '🧮' },
 ];
 
-export const PROBLEMS = [
+const BASE_PROBLEMS = [
   // ---------------------------------------------------------------- Arrays
   {
     id: 'two-sum',
@@ -2475,6 +2481,8 @@ function uniquePaths(m, n) {
     ],
   },
 ];
+
+export const PROBLEMS = [...BASE_PROBLEMS, ...EXTRA_PROBLEMS, ...PROBLEMS_EXTRA2];
 
 export const getProblem = (id) => PROBLEMS.find((p) => p.id === id);
 

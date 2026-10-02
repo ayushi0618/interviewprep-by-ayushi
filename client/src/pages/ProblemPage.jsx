@@ -389,6 +389,8 @@ export default function ProblemPage({ problemId, onBack, onOpenProblem, onOpenAr
               onRunShortcut={() => handleJudge('run')}
               ariaLabel={`Code editor for ${problem.title}`}
               heightClass="h-[440px]"
+              language="javascript"
+              label={`${problem.fn}.js`}
             />
 
             <p className="border-t border-brand-100 bg-brand-50/60 px-4 py-2 text-xs text-slate-500">

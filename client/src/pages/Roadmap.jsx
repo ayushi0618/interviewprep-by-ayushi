@@ -1,6 +1,6 @@
 // Roadmap.jsx — the DSA Roadmap: a NeetCode-style journey through the sheet.
 //
-// Twelve stops, one per DSA Sheet topic, in pattern order (arrays first,
+// Thirteen stops, one per DSA Sheet topic, in pattern order (arrays first,
 // dynamic programming last). Every number on this page is derived live from
 // the sheet data (data/dsaSheet.js) and the one site-wide progress store
 // (lib/progress.jsx) — solved counts here always match the sheet itself.
@@ -31,6 +31,7 @@ const ROADMAP_ORDER = [
   'sorting',
   'linked-list',
   'trees',
+  'heap',
   'graphs',
   'dp',
 ];
@@ -96,7 +97,7 @@ export default function Roadmap({ onSheet, onProblem }) {
         <div>
           <h1 className="text-3xl md:text-4xl font-extrabold text-brand-900">🗺️ DSA Roadmap</h1>
           <p className="text-slate-600 mt-2 max-w-2xl leading-relaxed">
-            The sheet as a journey: twelve pattern stops, in the order they build on each
+            The sheet as a journey: thirteen pattern stops, in the order they build on each
             other. Click any stop to jump straight to its problems on the sheet.
           </p>
         </div>
