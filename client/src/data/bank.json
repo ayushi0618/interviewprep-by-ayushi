@@ -1,0 +1,1452 @@
+{
+  "javascript": [
+    {
+      "question": "What are the data types in JavaScript?",
+      "answer": "There are 7 primitives — string, number, boolean, null, undefined, symbol, and bigint — which are copied by value. Everything else is an object (reference type), copied by reference, so two variables can point at the same object.",
+      "keywords": [
+        "copied",
+        "object",
+        "reference",
+        "bigint",
+        "boolean",
+        "data"
+      ]
+    },
+    {
+      "question": "What's the difference between `var`, `let`, and `const`?",
+      "answer": "`var` is function-scoped and hoisted as `undefined`. `let` and `const` are block-scoped and sit in the Temporal Dead Zone until declared. `let` can be reassigned, `const` can't — though a const object's properties can still change. In practice: `const` by default, `let` when needed, `var` rarely.",
+      "keywords": [
+        "const",
+        "block-scoped",
+        "change",
+        "dead",
+        "declared",
+        "default"
+      ]
+    },
+    {
+      "question": "What is hoisting?",
+      "answer": "Declarations are moved to the top of their scope before code runs. `var` variables are hoisted initialised to `undefined`, function declarations are hoisted completely, but `let`/`const` stay uninitialised in the TDZ — accessing them early throws a ReferenceError.",
+      "keywords": [
+        "declarations",
+        "hoisted",
+        "accessing",
+        "code",
+        "completely",
+        "const"
+      ]
+    },
+    {
+      "question": "What is a closure? Give one use case.",
+      "answer": "A closure is a function that remembers variables from the scope where it was created, even after that scope finishes. I use it for things like a counter factory — the count stays private, and only the returned function can change it. React hooks rely on closures too.",
+      "keywords": [
+        "closure",
+        "function",
+        "scope",
+        "case",
+        "change",
+        "closures"
+      ]
+    },
+    {
+      "question": "How does `this` work in JavaScript?",
+      "answer": "`this` is decided at call time, not when the function is written. If an object calls the method, `this` is that object; if called plainly, it's `undefined` in strict mode. Arrow functions have no `this` of their own — they inherit it from the surrounding scope, which is why we use them in callbacks.",
+      "keywords": [
+        "object",
+        "arrow",
+        "call",
+        "callbacks",
+        "called",
+        "calls"
+      ]
+    },
+    {
+      "question": "`==` vs `===` — which should I use?",
+      "answer": "`===` compares value and type with no conversion, so it's predictable. `==` coerces types first, which causes surprises like `[] == 0` being true. I always use `===`, except `x == null` to check null and undefined together.",
+      "keywords": [
+        "null",
+        "which",
+        "always",
+        "being",
+        "causes",
+        "check"
+      ]
+    },
+    {
+      "question": "`map` vs `forEach` — when do you use each?",
+      "answer": "`map` returns a new array of transformed values and is chainable; `forEach` returns `undefined` and is only for side effects like logging. If I need a result, `map`; if I just need to do something per item, `forEach`.",
+      "keywords": [
+        "foreach",
+        "need",
+        "returns",
+        "array",
+        "chainable",
+        "effects"
+      ]
+    },
+    {
+      "question": "What is `reduce`?",
+      "answer": "`reduce` folds an array into a single value using an accumulator. I pass a callback `(acc, current) => newAcc` and a starting value — like summing `[1,2,3]` with `reduce((a, n) => a + n, 0)`, which gives 6. It can also build objects or group data.",
+      "keywords": [
+        "reduce",
+        "value",
+        "accumulator",
+        "also",
+        "array",
+        "build"
+      ]
+    },
+    {
+      "question": "How do you copy an object? What's shallow vs deep?",
+      "answer": "Spread or `Object.assign` copies the top level only — that's a shallow copy, so nested objects are still shared with the original. For a full deep copy I use `structuredClone()`. The old JSON stringify trick works but drops functions and undefined and breaks on Dates and circular references.",
+      "keywords": [
+        "copy",
+        "deep",
+        "shallow",
+        "breaks",
+        "circular",
+        "copies"
+      ]
+    },
+    {
+      "question": "What is a Promise, and what are its states?",
+      "answer": "A Promise represents a value that will arrive later. It's pending first, then settles once — either fulfilled with a value or rejected with an error — and it can never change after that. I consume it with `.then`/`.catch`, or `await` inside an async function with try/catch.",
+      "keywords": [
+        "catch",
+        "promise",
+        "value",
+        "arrive",
+        "async",
+        "await"
+      ]
+    },
+    {
+      "question": "How do you call multiple APIs in parallel?",
+      "answer": "I start all the promises first and await them together with `Promise.all`, so they run concurrently instead of one after another. One caveat: if any single promise rejects, `Promise.all` rejects entirely — if I need every result regardless, I use `Promise.allSettled`.",
+      "keywords": [
+        "promise.all",
+        "rejects",
+        "another",
+        "apis",
+        "await",
+        "call"
+      ]
+    },
+    {
+      "question": "What is the event loop?",
+      "answer": "JavaScript is single-threaded, so async work like timers and fetch is handed to the browser or Node APIs. Finished callbacks queue up: promise callbacks in the microtask queue, timers in the macrotask queue. Whenever the call stack empties, the event loop drains all microtasks first, then takes one macrotask, and repeats.",
+      "keywords": [
+        "queue",
+        "callbacks",
+        "event",
+        "loop",
+        "macrotask",
+        "timers"
+      ]
+    },
+    {
+      "question": "What will `setTimeout` with 0ms actually do?",
+      "answer": "It doesn't run immediately — it schedules the callback in the macrotask queue. It runs only after the current synchronous code and all microtasks finish. That's why a promise callback always prints before a 0ms timer callback.",
+      "keywords": [
+        "callback",
+        "actually",
+        "always",
+        "code",
+        "current",
+        "doesn"
+      ]
+    },
+    {
+      "question": "Spread vs Rest — aren't they the same `...`?",
+      "answer": "Same syntax, opposite direction. Spread expands an array or object into pieces — like `[...arr, 4]` or copying props. Rest collects pieces into an array — like `function sum(...nums)` gathering all arguments. Where it appears decides which one it is.",
+      "keywords": [
+        "array",
+        "like",
+        "pieces",
+        "rest",
+        "spread",
+        "appears"
+      ]
+    },
+    {
+      "question": "What are the falsy values in JavaScript?",
+      "answer": "Exactly eight: `false`, `0`, `-0`, `0n`, empty string, `null`, `undefined`, and `NaN`. Everything else is truthy — including `\"0\"`, empty arrays, and empty objects. That last part surprises people: the string `\"false\"` is truthy, only the boolean `false` is falsy.",
+      "keywords": [
+        "empty",
+        "false",
+        "falsy",
+        "string",
+        "truthy",
+        "arrays"
+      ]
+    }
+  ],
+  "react": [
+    {
+      "question": "What is React and why use it over vanilla JavaScript?",
+      "answer": "React is a library for building UIs using components. Instead of manually updating the DOM every time data changes, I describe what the UI should look like for the current state, and React updates only the parts that changed. It makes large apps much easier to manage and reuse.",
+      "keywords": [
+        "react",
+        "apps",
+        "building",
+        "changed",
+        "changes",
+        "components"
+      ]
+    },
+    {
+      "question": "What is JSX? Is it HTML?",
+      "answer": "JSX is a syntax extension that lets me write markup-like code inside JavaScript. It's not HTML — it compiles to `React.createElement` calls. That's why we write `className` instead of `class`, `htmlFor` instead of `for`, and close every tag.",
+      "keywords": [
+        "html",
+        "instead",
+        "write",
+        "calls",
+        "class",
+        "classname"
+      ]
+    },
+    {
+      "question": "What is the Virtual DOM?",
+      "answer": "It's a lightweight in-memory copy of the real DOM. When state changes, React builds a new virtual tree, diffs it against the old one, and applies only the minimum real DOM updates. The diffing process is called reconciliation.",
+      "keywords": [
+        "real",
+        "virtual",
+        "against",
+        "applies",
+        "builds",
+        "called"
+      ]
+    },
+    {
+      "question": "Props vs state — what's the difference?",
+      "answer": "Props are data passed from a parent to a child; they're read-only inside the child. State is data the component owns and can change with a setter function, which triggers a re-render. Props are like function arguments; state is the component's memory.",
+      "keywords": [
+        "props",
+        "state",
+        "child",
+        "component",
+        "data",
+        "function"
+      ]
+    },
+    {
+      "question": "Why shouldn't we modify state directly, like `user.name = \"x\"`?",
+      "answer": "Because React detects changes by comparing references. If I mutate the same object, React may not re-render, and the UI goes stale. I should always create a new object or array — like `setUser({ ...user, name: \"x\" })` — so React sees a changed reference.",
+      "keywords": [
+        "react",
+        "like",
+        "object",
+        "always",
+        "array",
+        "because"
+      ]
+    },
+    {
+      "question": "Explain `useEffect` and the dependency array.",
+      "answer": "`useEffect` runs code after render for side effects like API calls and timers. With no dependency array it runs after every render; with an empty array, once on mount; with values listed, on mount and whenever those values change. I can return a cleanup function that runs before the next effect and on unmount.",
+      "keywords": [
+        "array",
+        "runs",
+        "dependency",
+        "mount",
+        "render",
+        "useeffect"
+      ]
+    },
+    {
+      "question": "What causes the famous useEffect infinite loop, and how do you fix it?",
+      "answer": "If an effect with no dependency array sets state, the state change re-renders, which runs the effect again — forever. Adding the correct dependency array fixes it: `[]` for once-on-mount, or the specific values the effect depends on.",
+      "keywords": [
+        "effect",
+        "array",
+        "dependency",
+        "state",
+        "adding",
+        "causes"
+      ]
+    },
+    {
+      "question": "Why do lists need keys? Can I use the index?",
+      "answer": "Keys give each item a stable identity so React can update, move, or delete the right DOM node efficiently. Index keys work for static lists, but if items are deleted or reordered, state and inputs can attach to the wrong row, so I prefer real IDs from the data.",
+      "keywords": [
+        "keys",
+        "index",
+        "lists",
+        "attach",
+        "data",
+        "delete"
+      ]
+    },
+    {
+      "question": "Controlled vs uncontrolled components?",
+      "answer": "In a controlled component, the input's value is stored in React state and updated via `onChange`, so React is the single source of truth — I can validate or format as the user types. Uncontrolled inputs keep their value in the DOM and are read via a ref, which is less common.",
+      "keywords": [
+        "controlled",
+        "react",
+        "uncontrolled",
+        "value",
+        "common",
+        "component"
+      ]
+    },
+    {
+      "question": "`useRef` vs `useState` — when do you use a ref?",
+      "answer": "If changing the value should re-render the UI, it's state. If I just need to remember something without re-rendering — like a DOM element to focus, or a timer ID — I use a ref. Its value persists across renders and updates instantly without triggering a render.",
+      "keywords": [
+        "value",
+        "without",
+        "across",
+        "changing",
+        "element",
+        "focus"
+      ]
+    },
+    {
+      "question": "What problem does Context solve?",
+      "answer": "Context solves prop drilling — passing data through many layers of components that don't use it — by providing a value at the top of a tree and consuming it anywhere below with `useContext`. I use it for theme, logged-in user, or language. One caution: every consumer re-renders when the value changes, so it's best for global, infrequently changing data.",
+      "keywords": [
+        "context",
+        "data",
+        "value",
+        "anywhere",
+        "best",
+        "caution"
+      ]
+    },
+    {
+      "question": "`useMemo` vs `useCallback`?",
+      "answer": "`useMemo` caches a computed value so an expensive calculation only reruns when its dependencies change. `useCallback` caches a function itself, mainly so a memoised child component doesn't re-render just because it received a \"new\" function. I'd only use either when there's an actual performance need — most renders are cheap.",
+      "keywords": [
+        "caches",
+        "function",
+        "usecallback",
+        "usememo",
+        "actual",
+        "because"
+      ]
+    },
+    {
+      "question": "How do you fetch data in React, and how do you cancel a request?",
+      "answer": "I fetch inside `useEffect` with loading, error, and data states, showing a loading indicator first, then the data or an error message. To cancel, I create an `AbortController`, pass its signal to fetch, and call `abort()` in the effect cleanup — that prevents setting state after the component unmounts.",
+      "keywords": [
+        "data",
+        "fetch",
+        "cancel",
+        "error",
+        "loading",
+        "abort"
+      ]
+    },
+    {
+      "question": "What makes a component re-render, and how can you prevent unnecessary ones?",
+      "answer": "State changes, a parent re-rendering, or a consumed context changing. Most re-renders are fine because React's diff keeps DOM updates minimal. When a heavy child re-renders with identical props, I wrap it in `React.memo` and keep its props stable with `useCallback`/`useMemo` where needed.",
+      "keywords": [
+        "props",
+        "re-renders",
+        "because",
+        "changes",
+        "changing",
+        "child"
+      ]
+    },
+    {
+      "question": "What is a custom hook? Give an example.",
+      "answer": "A custom hook is a function starting with `use` that packages reusable logic built on other hooks. For example, a `useFetch` hook that takes a URL and returns `{ data, loading, error }` — every component that needs API data reuses it instead of repeating the fetch-and-state code. It shares logic, not state — each component using it gets its own state.",
+      "keywords": [
+        "hook",
+        "component",
+        "custom",
+        "data",
+        "example",
+        "logic"
+      ]
+    }
+  ],
+  "backend": [
+    {
+      "question": "What exactly happens when I type a URL in the browser and press Enter?",
+      "answer": "The browser turns the domain into an IP address using DNS, opens a connection to that server, and sends an HTTP request. The server — in my case an Express app — processes it, talks to the database if needed, and sends back an HTTP response with a status code and usually JSON, which the browser then renders or uses.",
+      "keywords": [
+        "browser",
+        "http",
+        "sends",
+        "server",
+        "address",
+        "back"
+      ]
+    },
+    {
+      "question": "Is Node.js single-threaded? Then how does it handle many requests at once?",
+      "answer": "JavaScript execution in Node runs on one main thread with an event loop. When a request needs slow I/O — a file read or a database query — Node hands that wait to the background (libuv) and moves on to other requests. When the I/O finishes, the callback joins the queue and runs. That's why async code scales, and why one blocking call like `readFileSync` can freeze everything.",
+      "keywords": [
+        "node",
+        "requests",
+        "runs",
+        "async",
+        "background",
+        "blocking"
+      ]
+    },
+    {
+      "question": "What is middleware in Express? Give a real example.",
+      "answer": "Middleware is a function that runs between the request arriving and the route handler. It receives `req`, `res`, and `next`. I use it for logging every request, checking JWT tokens for authentication, and validating input. Calling `next()` passes control forward; forgetting it leaves the request hanging. Order matters — middleware runs in the order it's registered.",
+      "keywords": [
+        "middleware",
+        "request",
+        "next",
+        "order",
+        "runs",
+        "arriving"
+      ]
+    },
+    {
+      "question": "GET vs POST — what's the difference?",
+      "answer": "GET only reads data and puts parameters in the URL as query strings, so it should never change anything on the server. POST sends data in the request body, usually to create something new. Also, POST is not idempotent — sending it twice creates two records, while repeating a GET changes nothing.",
+      "keywords": [
+        "post",
+        "data",
+        "also",
+        "anything",
+        "body",
+        "change"
+      ]
+    },
+    {
+      "question": "What do 401 and 403 mean?",
+      "answer": "401 means the user isn't authenticated — no token, or an invalid or expired one; they need to log in. 403 means they *are* logged in but don't have permission for that action — like a normal user calling an admin-only route.",
+      "keywords": [
+        "means",
+        "they",
+        "user",
+        "action",
+        "admin-only",
+        "authenticated"
+      ]
+    },
+    {
+      "question": "How does JWT authentication work in your projects?",
+      "answer": "At login, after verifying the password with bcrypt, I sign a JWT containing the user id and role using a secret from my environment variables. The client sends it as `Authorization: Bearer <token>` on every request. My auth middleware verifies it — if it's valid, I attach the decoded user to `req` and continue; if not, I return 401. The token itself is just encoded, not encrypted, so I never put sensitive data in the payload.",
+      "keywords": [
+        "token",
+        "user",
+        "attach",
+        "auth",
+        "authentication",
+        "authorization"
+      ]
+    },
+    {
+      "question": "How do you store passwords safely?",
+      "answer": "Never in plain text. I hash them with bcrypt, which automatically adds a random salt, so even identical passwords produce different hashes. At login I use `bcrypt.compare` to check the entered password against the stored hash. Hashing is one-way, so even if the database leaks, the original passwords can't be recovered from it.",
+      "keywords": [
+        "passwords",
+        "even",
+        "hash",
+        "adds",
+        "against",
+        "automatically"
+      ]
+    },
+    {
+      "question": "SQL or NoSQL — how do you choose?",
+      "answer": "If the data is highly relational and needs strict consistency — like payments or bookings — I'd choose SQL with its fixed schema and JOINs. If the data is document-shaped, flexible, or changes shape often — like product catalogs or user content — I'd choose NoSQL like MongoDB. In my MERN projects I use MongoDB with Mongoose, but I can write basic SQL including JOINs when needed.",
+      "keywords": [
+        "choose",
+        "like",
+        "data",
+        "joins",
+        "mongodb",
+        "nosql"
+      ]
+    },
+    {
+      "question": "What is CORS and why did you face it?",
+      "answer": "My frontend and backend run on different origins during development, and browsers block such cross-origin calls by default — that's the Same-Origin Policy. CORS is the server's way of saying which origins are allowed. I fix it with the `cors` package in Express, and in production I restrict it to my real frontend's domain instead of allowing everyone.",
+      "keywords": [
+        "cors",
+        "frontend",
+        "origins",
+        "allowed",
+        "allowing",
+        "backend"
+      ]
+    },
+    {
+      "question": "What's the difference between authentication and authorization?",
+      "answer": "Authentication asks 'who are you?' — it's the login step. Authorization asks 'what can you do?' — it happens after login. For example, any logged-in user can view products (authorized for all users), but only an admin can delete them. In code, my auth middleware verifies the JWT first, then a role check handles authorization.",
+      "keywords": [
+        "authorization",
+        "asks",
+        "authentication",
+        "login",
+        "admin",
+        "auth"
+      ]
+    },
+    {
+      "question": "What is the event loop, in simple words?",
+      "answer": "It's Node's system for juggling tasks on one thread. Synchronous code runs first; when an async operation like a database call is started, Node doesn't wait — it registers a callback and continues with other work. The event loop keeps checking: when the async work finishes, its callback gets a turn to run. That's how one thread serves thousands of requests.",
+      "keywords": [
+        "async",
+        "callback",
+        "event",
+        "loop",
+        "node",
+        "thread"
+      ]
+    },
+    {
+      "question": "PUT vs PATCH?",
+      "answer": "PUT replaces the entire resource — I must send the complete object, and repeating it gives the same result, so it's idempotent. PATCH changes only the fields I send. If a client sends `{ \"name\": \"New Name\" }` with PATCH, only the name updates; with PUT, missing fields could be wiped or rejected.",
+      "keywords": [
+        "name",
+        "patch",
+        "fields",
+        "send",
+        "changes",
+        "client"
+      ]
+    },
+    {
+      "question": "How do you handle errors in your Express APIs?",
+      "answer": "Every database call sits inside try/catch. Known problems get proper status codes — 400 for validation failures, 404 when a record doesn't exist — and unexpected errors return 500 with a generic message. I also use a central error-handling middleware with the four-argument signature `(err, req, res, next)` placed after all routes, so error responses stay consistent.",
+      "keywords": [
+        "errors",
+        "also",
+        "apis",
+        "call",
+        "catch",
+        "central"
+      ]
+    },
+    {
+      "question": "What goes in your `.env` file, and what must never happen to it?",
+      "answer": "Secrets and configuration: the MongoDB connection URL, JWT secret, port, and any API keys. It must never be committed to GitHub — it goes in `.gitignore` immediately, because leaked keys get found by bots within minutes. Instead, I commit a `.env.example` with variable names and dummy values so other developers know what to configure.",
+      "keywords": [
+        "goes",
+        "keys",
+        "must",
+        "never",
+        "because",
+        "bots"
+      ]
+    },
+    {
+      "question": "Your API works on your laptop but not after deployment. What do you check first?",
+      "answer": "Three things, in order: one, are all environment variables set on the hosting platform — a missing database URL is the most common cause. Two, is the app listening on `process.env.PORT` instead of a hardcoded port, because the host assigns its own port. Three, I read the deployment logs — the actual error is almost always printed right there.",
+      "keywords": [
+        "deployment",
+        "port",
+        "actual",
+        "almost",
+        "always",
+        "assigns"
+      ]
+    }
+  ],
+  "dsa": [
+    {
+      "question": "Array vs Linked List — when do you use each?",
+      "answer": "Use an array when you need fast index access (O(1)) and the size is fairly fixed. Use a linked list when insertions/deletions at known positions are frequent and random access is rare. Arrays also win in practice more often than students expect, because contiguous memory is cache-friendly.",
+      "keywords": [
+        "access",
+        "array",
+        "linked",
+        "list",
+        "also",
+        "arrays"
+      ]
+    },
+    {
+      "question": "How do you find a cycle in a linked list?",
+      "answer": "Floyd's fast & slow pointers: slow moves 1 step, fast moves 2. If they ever meet, there's a cycle; if fast reaches null, there isn't. It uses O(1) extra space — mention that you'd otherwise need a hash set of visited nodes (O(n) space).",
+      "keywords": [
+        "fast",
+        "cycle",
+        "moves",
+        "slow",
+        "space",
+        "ever"
+      ]
+    },
+    {
+      "question": "Why is hash map lookup O(1)? Is it always?",
+      "answer": "A hash function converts the key directly into a bucket index, so you jump there without scanning — average O(1). It's not guaranteed: if many keys collide into the same bucket, lookup can degrade to O(n). Good hash functions + resizing keep collisions rare, so we quote the average.",
+      "keywords": [
+        "hash",
+        "average",
+        "bucket",
+        "lookup",
+        "always",
+        "collide"
+      ]
+    },
+    {
+      "question": "Two Sum: array is sorted. Map or two pointers?",
+      "answer": "Two pointers. Left at start, right at end; sum too small → move left up, too big → move right down. Sorting already gives us the ordering, so we get O(n) time with O(1) space — the hash map's O(n) extra space buys us nothing here.",
+      "keywords": [
+        "left",
+        "move",
+        "pointers",
+        "right",
+        "space",
+        "already"
+      ]
+    },
+    {
+      "question": "Explain binary search. When does it NOT work?",
+      "answer": "Keep halving the search range using the middle element; each step discards half. It needs sorted data (or a monotonic yes/no condition). On unsorted data there's no way to know which half to discard, so it fails — you'd sort first (O(n log n)) or just do a linear scan.",
+      "keywords": [
+        "data",
+        "half",
+        "search",
+        "binary",
+        "condition",
+        "discard"
+      ]
+    },
+    {
+      "question": "Stack or Queue for BFS? Why?",
+      "answer": "Queue. BFS visits nodes level by level: nodes found first (closest to start) must be processed first, which is exactly FIFO order. A stack would give DFS — deep-first instead of level-first.",
+      "keywords": [
+        "first",
+        "level",
+        "nodes",
+        "queue",
+        "stack",
+        "closest"
+      ]
+    },
+    {
+      "question": "What's the difference between BFS and DFS? When is each better?",
+      "answer": "BFS explores level-by-level using a queue and finds the *shortest path* in unweighted graphs. DFS dives down one path using a stack/recursion and is better for exploring everything — connectivity, cycles, islands. Both are O(V + E) and both need a visited set.",
+      "keywords": [
+        "better",
+        "path",
+        "using",
+        "connectivity",
+        "cycles",
+        "difference"
+      ]
+    },
+    {
+      "question": "How do you find the middle of a linked list in one pass?",
+      "answer": "Fast & slow pointers. Slow moves one step, fast moves two; when fast reaches the end, slow is exactly at the middle. No counting pass or extra storage needed.",
+      "keywords": [
+        "fast",
+        "slow",
+        "middle",
+        "moves",
+        "pass",
+        "counting"
+      ]
+    },
+    {
+      "question": "What two properties make a problem a DP problem?",
+      "answer": "Overlapping subproblems — the same subproblem recurs (like fib(3) inside fib(5)) — and optimal substructure, where the optimal answer is composed of optimal sub-answers. If subproblems never repeat, plain recursion/divide-and-conquer is enough.",
+      "keywords": [
+        "optimal",
+        "problem",
+        "subproblems",
+        "answer",
+        "composed",
+        "divide-and-conquer"
+      ]
+    },
+    {
+      "question": "`fib(5)` with plain recursion is slow. Why, and how do you fix it?",
+      "answer": "The recursion tree recomputes values: fib(3) twice, fib(2) three times — exponential O(2ⁿ) total calls. Fix with memoization: cache each result after computing it, so each value is computed once → O(n) time, O(n) space. Or tabulate bottom-up with two variables for O(1) space.",
+      "keywords": [
+        "recursion",
+        "space",
+        "bottom-up",
+        "cache",
+        "calls",
+        "computed"
+      ]
+    },
+    {
+      "question": "Longest substring without repeating characters — approach?",
+      "answer": "Variable sliding window with a set. Expand the right end; when you hit a character already in the window, shrink from the left until it's removed. Track the max window length. Each character enters/leaves once, so O(n) total.",
+      "keywords": [
+        "window",
+        "character",
+        "already",
+        "approach",
+        "characters",
+        "enters"
+      ]
+    },
+    {
+      "question": "How do you reverse a linked list?",
+      "answer": "Iteratively with three pointers: `prev` (null), `curr` (head), and a saved `next`. At each step: save next, point curr back to prev, then advance prev and curr. Say out loud that you save `next` *before* rewiring — that's where everyone loses the list.",
+      "keywords": [
+        "curr",
+        "next",
+        "prev",
+        "list",
+        "save",
+        "advance"
+      ]
+    },
+    {
+      "question": "Merge sort vs quick sort — which and why?",
+      "answer": "Both average O(n log n). Merge sort guarantees O(n log n) worst-case and is stable, but needs O(n) extra space — preferred for linked lists and when stability matters. Quick sort's worst case is O(n²) (bad pivots) but it's faster in practice due to cache behavior and sorts in place. Most library sorts are hybrids of the two plus insertion sort.",
+      "keywords": [
+        "sort",
+        "merge",
+        "quick",
+        "sorts",
+        "average",
+        "behavior"
+      ]
+    },
+    {
+      "question": "How do you check for valid parentheses?",
+      "answer": "Stack. Push opening brackets; on a closing bracket, the stack top must be the matching opener — pop it. If the stack is empty when a closer arrives, or non-empty at the end, it's invalid. The most recent opener must close first — that's LIFO doing the work.",
+      "keywords": [
+        "stack",
+        "must",
+        "opener",
+        "arrives",
+        "bracket",
+        "brackets"
+      ]
+    },
+    {
+      "question": "A problem says \"longest subarray with sum ≤ k, all numbers positive.\" First thought?",
+      "answer": "Sliding window. Positivity makes it valid: expanding only increases the sum and shrinking only decreases it, so the window is monotonic and safe to slide — expand right, shrink left whenever the sum exceeds k, track max length. (Bonus awareness: with negative numbers this breaks, and you'd switch to prefix sums + hashing.)",
+      "keywords": [
+        "numbers",
+        "window",
+        "awareness",
+        "bonus",
+        "breaks",
+        "decreases"
+      ]
+    }
+  ],
+  "typescript": [
+    {
+      "question": "What is TypeScript, and why use it over JavaScript?",
+      "answer": "TypeScript is JavaScript with static types added — it compiles down to plain JavaScript before anything runs. I use it because it catches type errors while I write code instead of at runtime, and I get much better autocomplete and safer refactoring.",
+      "keywords": [
+        "javascript",
+        "typescript",
+        "added",
+        "anything",
+        "autocomplete",
+        "because"
+      ]
+    },
+    {
+      "question": "What is the difference between `any` and `unknown`?",
+      "answer": "Both mean \"I don't know the type yet,\" but `any` turns the checker off completely, so I can do anything and errors come back at runtime. `unknown` is the safe version — I have to narrow it with a check like `typeof` before I can use it.",
+      "keywords": [
+        "unknown",
+        "anything",
+        "back",
+        "check",
+        "checker",
+        "come"
+      ]
+    },
+    {
+      "question": "Interface vs type alias — which one do you pick?",
+      "answer": "For object shapes they're almost interchangeable, so I use `interface` there for clearer errors and declaration merging. I switch to `type` when I need unions, tuples, or helper transformations that interfaces can't express.",
+      "keywords": [
+        "interface",
+        "type",
+        "alias",
+        "almost",
+        "clearer",
+        "declaration"
+      ]
+    },
+    {
+      "question": "What are generics? Why not just use `any`?",
+      "answer": "Generics let me write one function that works with many types while keeping the connection between input and output — numbers in, number out. With `any` that connection is lost and everything downstream becomes unchecked, so generics give me reuse *with* safety.",
+      "keywords": [
+        "generics",
+        "connection",
+        "becomes",
+        "downstream",
+        "everything",
+        "function"
+      ]
+    },
+    {
+      "question": "What is type narrowing?",
+      "answer": "When a value could be a string or a number, I can't use string methods until I prove which one it is — that proof is narrowing. I usually do it with `typeof` for primitives, `instanceof` for classes, and the `in` operator to check an object has a property.",
+      "keywords": [
+        "narrowing",
+        "string",
+        "check",
+        "classes",
+        "instanceof",
+        "methods"
+      ]
+    },
+    {
+      "question": "How do you type props in a React component?",
+      "answer": "I define an interface with each prop and its type, mark optional props with a question mark, and destructure it in the function parameters. That way anyone using my component gets autocomplete and an error if they pass the wrong thing.",
+      "keywords": [
+        "component",
+        "mark",
+        "props",
+        "type",
+        "anyone",
+        "autocomplete"
+      ]
+    },
+    {
+      "question": "How do you type `useState` when the value starts as `null`?",
+      "answer": "I pass the generic explicitly, like `useState<User | null>(null)`, so TypeScript knows the state will hold a User later. If I skip that, it infers the type as only `null` and complains when I set a real user — and it forces me to check for null before use, which is what I want.",
+      "keywords": [
+        "null",
+        "user",
+        "type",
+        "usestate",
+        "check",
+        "complains"
+      ]
+    },
+    {
+      "question": "What does the `as` keyword do? Is it a cast?",
+      "answer": "It's not a cast — nothing is checked or converted at runtime. It's me telling the compiler \"trust me, this is that type.\" I use it rarely, only when I genuinely know more than the compiler, because if I'm wrong the code compiles and still crashes.",
+      "keywords": [
+        "cast",
+        "compiler",
+        "because",
+        "checked",
+        "code",
+        "compiles"
+      ]
+    },
+    {
+      "question": "What is a union type? Give an example.",
+      "answer": "A union means a value can be one of several types, written with a pipe — like `type ID = string | number`. Before using it I narrow it down, so inside a `typeof id === \"string\"` block TypeScript knows it's definitely a string.",
+      "keywords": [
+        "string",
+        "type",
+        "union",
+        "block",
+        "definitely",
+        "down"
+      ]
+    },
+    {
+      "question": "Name two utility types and what you use them for.",
+      "answer": "`Partial` makes all properties optional, which I use for update payloads where only some fields change. `Pick` and `Omit` let me reuse one base type — like taking a big User type and picking just name and age for a small card component.",
+      "keywords": [
+        "name",
+        "type",
+        "base",
+        "card",
+        "change",
+        "component"
+      ]
+    }
+  ],
+  "nextjs": [
+    {
+      "question": "What is Next.js, and why use it over plain React?",
+      "answer": "Next.js is a framework built on top of React — React gives me components, Next adds routing, server-side rendering options, and API routes in the same project. I use it when a site is public and SEO or first-load speed matters, because it can send ready-made HTML instead of an empty page that fills in later.",
+      "keywords": [
+        "react",
+        "next.js",
+        "adds",
+        "because",
+        "built",
+        "components"
+      ]
+    },
+    {
+      "question": "How does routing work in Next.js?",
+      "answer": "It's file-based — the folder structure is the route table, so I don't write any route configuration. A folder with a page file becomes a URL, and a folder in square brackets like `[id]` becomes a dynamic route whose value I get as a param.",
+      "keywords": [
+        "folder",
+        "route",
+        "becomes",
+        "brackets",
+        "configuration",
+        "dynamic"
+      ]
+    },
+    {
+      "question": "Pages Router vs App Router — what's the difference?",
+      "answer": "Pages Router is the older system where each file in the `pages` folder is a route and I fetch data with functions like `getServerSideProps`. App Router is the current default — routes live in the `app` folder, components are Server Components by default, and I can just `await fetch` inside the component.",
+      "keywords": [
+        "router",
+        "pages",
+        "components",
+        "default",
+        "fetch",
+        "folder"
+      ]
+    },
+    {
+      "question": "What is the difference between SSR, SSG, and CSR?",
+      "answer": "CSR renders in the browser after the JavaScript loads — fine for logged-in dashboards, bad for SEO. SSR builds the HTML on the server for every request, so it's always fresh and search engines see real content. SSG builds the HTML once at build time — fastest, but frozen until I rebuild, so I use it for blogs and docs that rarely change.",
+      "keywords": [
+        "builds",
+        "html",
+        "always",
+        "blogs",
+        "browser",
+        "build"
+      ]
+    },
+    {
+      "question": "What is ISR?",
+      "answer": "ISR is SSG with a refresh timer — the page is static and fast, but Next quietly regenerates it after an interval I set, like every 60 seconds. I use it for pages that are public but change regularly, like product listings, where pure SSG would go stale and SSR would be slower than needed.",
+      "keywords": [
+        "like",
+        "change",
+        "every",
+        "fast",
+        "interval",
+        "listings"
+      ]
+    },
+    {
+      "question": "How do you fetch data in the App Router?",
+      "answer": "In a Server Component I make the component `async` and `await fetch` directly inside it — no `useEffect` and no special Next functions. The data is fetched on the server, so the HTML that reaches the user already has the content in it.",
+      "keywords": [
+        "component",
+        "data",
+        "fetch",
+        "server",
+        "already",
+        "async"
+      ]
+    },
+    {
+      "question": "Can Next.js replace a backend? What are API routes?",
+      "answer": "For small to medium apps, yes — files under the api folder become real server endpoints where I export GET and POST handlers. They run only on the server, so that's where I keep secrets and database calls. I'd split out a separate backend only when the API grows big enough to need its own service.",
+      "keywords": [
+        "backend",
+        "server",
+        "where",
+        "apps",
+        "become",
+        "calls"
+      ]
+    },
+    {
+      "question": "When would you NOT use Next.js?",
+      "answer": "When the app is fully private — like an internal admin tool behind a login — SEO and server rendering buy me nothing and the framework is just overhead. For that I'd use plain React with Vite; I save Next.js for public, content-driven sites or when I want a light backend in the same repo.",
+      "keywords": [
+        "next.js",
+        "admin",
+        "backend",
+        "behind",
+        "content-driven",
+        "framework"
+      ]
+    }
+  ],
+  "sql": [
+    {
+      "question": "What is the difference between WHERE and HAVING?",
+      "answer": "WHERE filters individual rows before grouping, and it cannot use aggregate functions. HAVING filters groups after GROUP BY, so conditions like AVG(salary) > 60000 belong in HAVING. I use WHERE first because filtering early is cheaper.",
+      "keywords": [
+        "having",
+        "where",
+        "filters",
+        "aggregate",
+        "because",
+        "belong"
+      ]
+    },
+    {
+      "question": "INNER JOIN vs LEFT JOIN — what's the difference?",
+      "answer": "INNER JOIN returns only rows that match in both tables. LEFT JOIN returns every row from the left table, filling NULLs where the right table has no match. I use LEFT JOIN when missing data should still show up — like listing all employees even if some have no department.",
+      "keywords": [
+        "join",
+        "left",
+        "inner",
+        "match",
+        "returns",
+        "table"
+      ]
+    },
+    {
+      "question": "How do you find employees with no matching record in another table?",
+      "answer": "I LEFT JOIN the two tables and then filter WHERE the right table's key IS NULL. For example, employees LEFT JOIN orders, then WHERE orders.id IS NULL gives me employees who never placed an order.",
+      "keywords": [
+        "employees",
+        "join",
+        "left",
+        "null",
+        "table",
+        "where"
+      ]
+    },
+    {
+      "question": "What does COUNT(*) vs COUNT(column) vs COUNT(DISTINCT column) do?",
+      "answer": "COUNT(*) counts all rows. COUNT(column) counts only non-NULL values in that column. COUNT(DISTINCT column) counts unique non-NULL values — so COUNT(DISTINCT city) tells me how many different cities appear.",
+      "keywords": [
+        "count",
+        "column",
+        "counts",
+        "distinct",
+        "non-null",
+        "values"
+      ]
+    },
+    {
+      "question": "What is a primary key, and can it be NULL?",
+      "answer": "A primary key uniquely identifies each row in a table, and there can be only one per table. It can never be NULL and never duplicate — the database enforces both. A foreign key, by contrast, can be NULL if the relationship is optional.",
+      "keywords": [
+        "null",
+        "never",
+        "primary",
+        "table",
+        "contrast",
+        "database"
+      ]
+    },
+    {
+      "question": "Explain 1NF, 2NF, and 3NF in one line each.",
+      "answer": "1NF means atomic values — no lists stuffed into one cell. 2NF means every non-key column depends on the whole primary key, not part of it. 3NF means no column depends on another non-key column, so each fact is stored exactly once.",
+      "keywords": [
+        "column",
+        "means",
+        "depends",
+        "non-key",
+        "another",
+        "atomic"
+      ]
+    },
+    {
+      "question": "What is an index, and when does it hurt?",
+      "answer": "An index is a sorted lookup structure that makes WHERE, JOIN, and ORDER BY on that column fast instead of scanning the whole table. It hurts on writes, because every insert or update must also update the index, and it costs disk space — so I index columns I actually filter on.",
+      "keywords": [
+        "index",
+        "update",
+        "actually",
+        "also",
+        "because",
+        "column"
+      ]
+    },
+    {
+      "question": "How do you fetch the second-highest salary?",
+      "answer": "One clean way is a subquery: SELECT MAX(salary) FROM employees WHERE salary < (SELECT MAX(salary) FROM employees). Another is ORDER BY salary DESC LIMIT 1 OFFSET 1. I mention the subquery version first because it shows I understand nesting.",
+      "keywords": [
+        "salary",
+        "employees",
+        "select",
+        "subquery",
+        "another",
+        "because"
+      ]
+    },
+    {
+      "question": "LIKE vs IN vs BETWEEN — when do you use each?",
+      "answer": "LIKE is for text patterns with wildcards, like names starting with 'A'. IN matches a value against a fixed list, like city IN ('Delhi', 'Pune'). BETWEEN is an inclusive range, mainly for numbers and dates. Picking the right one keeps the query readable and index-friendly.",
+      "keywords": [
+        "like",
+        "against",
+        "city",
+        "dates",
+        "delhi",
+        "fixed"
+      ]
+    },
+    {
+      "question": "SQL or MySQL — are they the same thing?",
+      "answer": "No — SQL is the language, MySQL is one database product that speaks it, like PostgreSQL or SQLite. The core syntax transfers, but dialects differ in small ways, like LIMIT in MySQL versus TOP in SQL Server. On my resume I write SQL for the skill and name the product separately.",
+      "keywords": [
+        "mysql",
+        "like",
+        "product",
+        "core",
+        "database",
+        "dialects"
+      ]
+    }
+  ],
+  "system-design": [
+    {
+      "question": "How would you design a URL shortener?",
+      "answer": "First I'd clarify scale and whether links expire. Then a simple API — POST creates a short code from an auto-increment ID encoded in Base62, GET redirects with a 302. I'd cache hot codes in Redis since reads dominate, and store code-to-URL pairs in one small table.",
+      "keywords": [
+        "auto-increment",
+        "base62",
+        "cache",
+        "clarify",
+        "code",
+        "code-to-url"
+      ]
+    },
+    {
+      "question": "How do you generate short, unique codes without collisions?",
+      "answer": "The simplest reliable way is an auto-increment database ID encoded in Base62 — uniqueness is guaranteed by the ID itself. Random strings also work but need a collision check and retry on insert. Pure hashing can collide between different URLs, so I wouldn't rely on it alone.",
+      "keywords": [
+        "alone",
+        "also",
+        "auto-increment",
+        "base62",
+        "check",
+        "codes"
+      ]
+    },
+    {
+      "question": "SQL or NoSQL for a chat app — and why?",
+      "answer": "The data is document-shaped and the schema is simple, so NoSQL like MongoDB works well for messages. But honestly, SQL is equally fine at this scale — messages fit a table with sender, receiver, and timestamp. I'd pick based on team familiarity and say so; the shape matters more than the brand.",
+      "keywords": [
+        "messages",
+        "nosql",
+        "based",
+        "brand",
+        "chat",
+        "data"
+      ]
+    },
+    {
+      "question": "Why WebSockets for chat instead of normal HTTP requests?",
+      "answer": "With HTTP polling the client keeps asking \"any new messages?\" every few seconds, wasting battery and still feeling laggy. A WebSocket keeps one connection open so the server pushes a message the moment it arrives. That's the difference between \"near-real-time\" and actually real-time.",
+      "keywords": [
+        "http",
+        "keeps",
+        "actually",
+        "arrives",
+        "asking",
+        "battery"
+      ]
+    },
+    {
+      "question": "Your app suddenly gets 10× traffic. What's your first move?",
+      "answer": "Find the bottleneck before touching anything — usually it's the database or one slow endpoint. Then the cheapest wins: cache hot reads, add a load balancer with stateless app servers, and add read replicas if the database is the limit. I wouldn't rewrite anything until I knew what was actually slow.",
+      "keywords": [
+        "anything",
+        "database",
+        "slow",
+        "actually",
+        "balancer",
+        "bottleneck"
+      ]
+    },
+    {
+      "question": "What does a load balancer actually do?",
+      "answer": "It's the single front door for traffic. It spreads requests evenly across multiple server copies, and if one server dies it routes around it. It only works if the servers are stateless — no user data stored on just one machine.",
+      "keywords": [
+        "server",
+        "across",
+        "actually",
+        "around",
+        "balancer",
+        "copies"
+      ]
+    },
+    {
+      "question": "Cache vs database — when does data live in each?",
+      "answer": "The database is the permanent source of truth; everything is saved there first. The cache holds temporary copies of frequently read data in memory for speed. If the cache dies, we lose speed, not data — that's the line I always state.",
+      "keywords": [
+        "cache",
+        "data",
+        "database",
+        "speed",
+        "always",
+        "copies"
+      ]
+    },
+    {
+      "question": "What's the difference between vertical and horizontal scaling?",
+      "answer": "Vertical scaling means a bigger machine — more RAM and CPU — which is simple but hits a hard ceiling. Horizontal scaling means more machines behind a load balancer, which scales much further but needs stateless services. I start vertical for simplicity and go horizontal when traffic demands it.",
+      "keywords": [
+        "horizontal",
+        "scaling",
+        "vertical",
+        "means",
+        "which",
+        "balancer"
+      ]
+    }
+  ],
+  "git-cs": [
+    {
+      "question": "`git fetch` vs `git pull`?",
+      "answer": "Fetch downloads remote changes but doesn't touch your code; pull = fetch + merge into your current branch. Fetch first when you want to inspect before merging.",
+      "keywords": [
+        "fetch",
+        "pull",
+        "branch",
+        "changes",
+        "code",
+        "current"
+      ]
+    },
+    {
+      "question": "How do you undo a commit?",
+      "answer": "`git reset --soft HEAD~1` keeps your changes staged; `--hard` deletes them completely. For a commit that's already pushed, use `git revert <hash>` — it creates a new commit that undoes the old one safely.",
+      "keywords": [
+        "commit",
+        "already",
+        "changes",
+        "completely",
+        "creates",
+        "deletes"
+      ]
+    },
+    {
+      "question": "What is a merge conflict and how do you fix it?",
+      "answer": "Two branches changed the same lines. Git marks the conflict in the file; you edit it to the correct final version, then `git add` and `git commit` to complete the merge.",
+      "keywords": [
+        "conflict",
+        "merge",
+        "branches",
+        "changed",
+        "commit",
+        "complete"
+      ]
+    },
+    {
+      "question": "How do you see commit history?",
+      "answer": "`git log` (add `--oneline` for a compact one-line-per-commit view).",
+      "keywords": [
+        "commit",
+        "compact",
+        "history",
+        "one-line-per-commit",
+        "oneline",
+        "view"
+      ]
+    },
+    {
+      "question": "Difference between `git stash` and commit?",
+      "answer": "Stash shelves unfinished changes temporarily without a commit, so you can switch branches; `git stash pop` restores them. A commit is permanent history.",
+      "keywords": [
+        "commit",
+        "stash",
+        "branches",
+        "changes",
+        "difference",
+        "history"
+      ]
+    },
+    {
+      "question": "What is HEAD?",
+      "answer": "A pointer to the commit you're currently on — usually the latest commit of your current branch.",
+      "keywords": [
+        "commit",
+        "branch",
+        "current",
+        "currently",
+        "head",
+        "latest"
+      ]
+    }
+  ],
+  "html-css": [
+    {
+      "question": "Block vs inline elements?",
+      "answer": "Block elements (`div`, `p`, `h1`) start on a new line and take full width; inline elements (`span`, `a`) sit in the flow and only take the width they need. `inline-block` is the middle ground — inline placement, but width/height apply.",
+      "keywords": [
+        "elements",
+        "inline",
+        "width",
+        "block",
+        "apply",
+        "flow"
+      ]
+    },
+    {
+      "question": "How do you center a div?",
+      "answer": "With flexbox on the parent: `display: flex; justify-content: center; align-items: center;` — the modern standard answer.",
+      "keywords": [
+        "center",
+        "align-items",
+        "answer",
+        "display",
+        "flex",
+        "flexbox"
+      ]
+    },
+    {
+      "question": "`display: none` vs `visibility: hidden`?",
+      "answer": "`display: none` removes the element from layout entirely; `visibility: hidden` hides it but keeps its space.",
+      "keywords": [
+        "display",
+        "hidden",
+        "none",
+        "visibility",
+        "element",
+        "entirely"
+      ]
+    },
+    {
+      "question": "What is z-index?",
+      "answer": "It controls stacking order of overlapping elements — higher value sits on top. It only works on positioned elements (`relative`/`absolute`/`fixed`/`sticky`).",
+      "keywords": [
+        "elements",
+        "absolute",
+        "controls",
+        "fixed",
+        "higher",
+        "order"
+      ]
+    },
+    {
+      "question": "`<div>` vs `<section>` vs `<article>`?",
+      "answer": "`<div>` is a generic container with no meaning; `<section>` groups related content; `<article>` is standalone, self-contained content like a blog post or card that makes sense on its own.",
+      "keywords": [
+        "article",
+        "content",
+        "section",
+        "blog",
+        "card",
+        "container"
+      ]
+    }
+  ],
+  "projects-hr": [
+    {
+      "question": "Walk me through what happens when I click 'suggest food'.",
+      "answer": "Your mood input goes from the React frontend to my Express API. The backend calls the Hugging Face model to detect the emotion, sends that to Gemini for a food suggestion, saves the result in MongoDB, and returns it to the frontend to display.",
+      "keywords": [
+        "food",
+        "frontend",
+        "backend",
+        "calls",
+        "click",
+        "detect"
+      ]
+    },
+    {
+      "question": "What if the AI API fails or is down?",
+      "answer": "Then the user shouldn't see a broken app. The API call is wrapped so failures are caught, and the user gets a clear message instead of a blank screen. Ideally I'd add a small set of default suggestions per mood as a fallback — that's the next improvement I'd make.",
+      "keywords": [
+        "user",
+        "blank",
+        "broken",
+        "call",
+        "caught",
+        "clear"
+      ]
+    },
+    {
+      "question": "Why MongoDB and not SQL?",
+      "answer": "The data here is flexible — suggestions, moods, timestamps, user history. There's no strict relationship structure I needed to enforce, so a document database was simpler and faster to build with. If the app needed complex joins between many related tables, I'd consider SQL.",
+      "keywords": [
+        "needed",
+        "build",
+        "complex",
+        "consider",
+        "data",
+        "database"
+      ]
+    },
+    {
+      "question": "How do you keep your API keys safe?",
+      "answer": "They live in environment variables on the server, never in the frontend code and never committed to GitHub. The frontend only talks to my backend, and the backend talks to the AI APIs.",
+      "keywords": [
+        "backend",
+        "frontend",
+        "never",
+        "talks",
+        "apis",
+        "code"
+      ]
+    },
+    {
+      "question": "How exactly is 'mastery' calculated?",
+      "answer": "Per topic — the number of problems you've solved in that topic compared to the total problems available in it. It gives a percentage, shown as a bar. It's simple, but that's deliberate — the point is a quick honest signal of where you're weak, not a complicated score.",
+      "keywords": [
+        "problems",
+        "topic",
+        "available",
+        "calculated",
+        "compared",
+        "complicated"
+      ]
+    },
+    {
+      "question": "How do you manage state in this app?",
+      "answer": "React state at the component level for the UI, with progress data kept in a central place so the dashboard, daily problem, and mastery views all read from the same source. If two screens show progress, they should never disagree — that's why the data lives in one place.",
+      "keywords": [
+        "data",
+        "place",
+        "progress",
+        "state",
+        "central",
+        "component"
+      ]
+    },
+    {
+      "question": "What does the AI tutor actually do?",
+      "answer": "It's powered by Gemini. When you're stuck, you can ask about the problem you're on — it gives hints and explains the concept instead of just handing you the final code. The goal is learning, not copy-pasting a solution.",
+      "keywords": [
+        "actually",
+        "code",
+        "concept",
+        "copy-pasting",
+        "explains",
+        "final"
+      ]
+    },
+    {
+      "question": "Why did you build this when LeetCode already exists?",
+      "answer": "LeetCode is great for problems, but it doesn't tell me 'your trees are weak, focus here this week' in a simple way, and it doesn't force my daily consistency. I built the layer I personally needed on top of practice.",
+      "keywords": [
+        "doesn",
+        "leetcode",
+        "already",
+        "build",
+        "built",
+        "consistency"
+      ]
+    },
+    {
+      "question": "How do roles and permissions work?",
+      "answer": "When a user logs in, their account carries a role. The frontend shows menus and screens based on that role, and the backend checks the role on protected routes before responding — so even if someone calls the API directly, they can't get data their role shouldn't see. Frontend hiding alone is not security; the check has to be on the server.",
+      "keywords": [
+        "role",
+        "frontend",
+        "their",
+        "account",
+        "alone",
+        "backend"
+      ]
+    },
+    {
+      "question": "Why SQLite here but MongoDB in Food for Mood?",
+      "answer": "Different data, different tool. Trishul's data is relational — assets belong to categories, maintenance records belong to assets, procurement links to inventory. Tables and relations fit naturally, so SQLite made sense, and it boots with zero setup. Food for Mood's data is loose and document-shaped, so MongoDB fit better there. I choose based on the data, not habit.",
+      "keywords": [
+        "data",
+        "assets",
+        "belong",
+        "different",
+        "food",
+        "mongodb"
+      ]
+    },
+    {
+      "question": "How is the kanban workflow modelled?",
+      "answer": "Each work item is a record with a status — for example pending, in progress, completed. The board is just the items grouped by status, and dragging or moving a card updates that one status field through the API. The board is a view; the status in the database is the truth.",
+      "keywords": [
+        "status",
+        "board",
+        "card",
+        "completed",
+        "database",
+        "dragging"
+      ]
+    },
+    {
+      "question": "What was the most difficult module?",
+      "answer": "The reports and analytics, because they depend on everyone else's data being correct. If asset and maintenance records are messy, the analytics are meaningless. It taught me that in real systems, data quality upstream decides everything downstream.",
+      "keywords": [
+        "analytics",
+        "data",
+        "asset",
+        "because",
+        "being",
+        "correct"
+      ]
+    }
+  ]
+}

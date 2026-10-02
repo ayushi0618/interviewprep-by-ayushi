@@ -1,51 +1,73 @@
-# 📚 Full-Stack Interview Notes
+# 🎤 InterviewPrep by Ayushi Singh
 
-### by Ayushi Singh
+A GeeksforGeeks-style interview-preparation website: full-stack notes that read like highlighted paper notes, timed flash-card practice, and a **live AI mock-interview room** (camera + voice) that asks you questions out loud, follows up on your answers, and grades you at the end.
 
-> [!TIP]
-> **Interview notes that actually look like notes** — highlighted definitions, comparison tables, flow diagrams, output puzzles, and a mock-interview question list after every topic. Made for final-year students and freshers preparing for MERN / full-stack interviews. Read them, then say the answers *out loud* — that's what interviews test.
+Built from my own interview preparation — every note is written the way you'd explain it *out loud* in an interview.
 
----
+## ✨ Features
 
-## 📖 What's inside
+- **📚 Notes library** — 12 topic guides with a sticky sidebar: JavaScript, React, Backend (Node/Express/APIs/DB), DSA, TypeScript, Next.js, SQL Deep-Dive, System Design for Freshers, Git & CS Fundamentals, HTML/CSS, Project Explainers + HR, and a Full Mock Bank with a 7-day plan
+- **📝 "Paper notes" rendering** — warm paper cards, colored highlight boxes (Note / Tip / Important / Warning), comparison tables, diagram cards, dark code blocks with copy buttons, collapsible solutions, and paper checkboxes for revision checklists
+- **🔍 Search** — filter topics *and* individual mock questions from the navbar
+- **🎴 Practice mode** — pick a topic deck, answer out loud against a 60-second timer, reveal the model answer, rate yourself (Knew it / Shaky / Missed), and get a score summary with "revise these" links; progress is saved in your browser
+- **🎥 Live AI Interview room** — camera/mic preview (never recorded or uploaded), the interviewer *speaks* questions (text-to-speech), you answer by voice (speech-to-text in Chrome/Edge) or typing, and at the end you get a per-question rubric, keyword gaps, model answers, and a full transcript
+- **📱 Responsive** — desktop-first multi-column layout that stacks cleanly on mobile
 
-| # | File | What you get |
-|---|------|--------------|
-| 1 | [⚡ JavaScript — Complete Notes](./01-javascript.md) | Data types & traps, `var/let/const`, hoisting, closures, `this`, coercion, promises, event loop + diagram, ES6+, 10 output puzzles |
-| 2 | [⚛️ React — Complete Notes](./02-react.md) | Components, props/state, all the hooks that matter, `useEffect` explained properly, Bug Hunt (3 classic bugs + fixes), Router, performance |
-| 3 | [🖥️ Backend — Complete Notes](./03-backend.md) | Node.js, Express, REST APIs, JWT auth, MongoDB + SQL, HTTP status codes, request-flow diagram |
-| 4 | [🧩 DSA — Complete Notes](./04-dsa.md) | Big-O, hashing, two pointers, sliding window, binary search, linked lists, trees, graphs, DP — with a pattern-recognition table |
-| 5 | [🧰 Extras — Git, CS Fundamentals, HTML/CSS](./05-extras.md) | The 10 Git commands that matter, OS/DBMS/Networks/OOP in 30-second answers, box model, flexbox vs grid |
-| 6 | [🎯 Project Explainers + HR Round](./06-projects-and-hr.md) | How to explain your projects in 30 seconds and 2 minutes, real "hard problem" stories, and speakable HR answers |
-| 7 | [🎤 Full Mock Interview Bank](./07-mock-interview-bank.md) | A complete timed mock — rapid fire, technical rounds, project round, scoring rubric |
+## 🧠 How the AI interviewer works
 
-## 🗺️ How to use these notes
+`POST /api/interview` (Express) has two brains:
 
-> [!IMPORTANT]
-> **The 3-pass method:**
-> 1. **Read** one file end-to-end (30–45 min). Don't memorize — understand.
-> 2. **Say it out loud.** Close the file and explain each topic like the interviewer just asked. Where you stumble = what to re-read.
-> 3. **Attempt the mock list** at the end of that file. Then do the full mock in file 7 with a friend, a timer, or a mirror.
+1. **Gemini mode** — if `GEMINI_API_KEY` is set, Gemini improvises follow-ups and feedback, anchored to the same question bank so scoring still works. Any API failure quietly falls back to scripted mode for that turn.
+2. **Scripted mode** — a deterministic ladder with **no key required**: intro → 5 bank questions (up to 2 follow-ups each) → closing, with keyword-based feedback. If the API call itself ever fails, the frontend runs the same ladder locally — so the room *always* works.
 
-> [!NOTE]
-> Every topic file ends with **🎤 Mock Interview Questions** (with model answers you can actually speak) and a **✅ 60-Second Revision Checklist** for the night before.
+Scoring is deliberately simple and explainable: answer length + keyword coverage against the model answer → Knew it / Shaky / Missed.
 
-## 🎯 Who this is for
+## 🛠️ Stack
 
-- Final-year CSE/IT students sitting for campus placements
-- Freshers and interns preparing for full-stack, frontend, or SDE interviews
-- Anyone whose revision notes are scattered across 40 browser tabs
+- **Frontend:** React 18, Vite, Tailwind CSS, `marked` (markdown → HTML with custom callout/diagram transforms)
+- **Backend:** Node.js + Express (serves the built site + the interview API)
+- **Speech:** Web Speech API (`speechSynthesis` + `SpeechRecognition`) — no external services
+- **Content:** each topic is a markdown file in `client/src/content/`; the practice question bank is generated from those files by `scripts/extract-bank.mjs`
 
-## ✍️ About the author
+## 🚀 Run it
 
-**Ayushi Singh** — final-year B.Tech CSE student (AKTU, Ghaziabad), full-stack developer working with React, Node.js, Express, MongoDB and TypeScript. Built and deployed multiple live products (Food for Mood AI, DSA Daily Coach, Trishul, UrjaSetu) and interned at Army Base Workshop, Meerut.
+```bash
+npm install            # server deps
+npm run install:client # frontend deps
+npm run build          # builds the client into client/dist
+npm start              # Express serves everything
+```
 
-🔗 [LinkedIn](https://www.linkedin.com/in/ayushi0618/) · [Portfolio](https://ayushi-tech-06181.vercel.app) · [GitHub](https://github.com/ayushi0618)
+Open the URL it prints (default port 3002, override with `PORT`).
 
-## ⭐ Found this useful?
+For local development with hot reload:
 
-Star the repo so other students find it — and if a note helped you crack a question, that's the whole point of making it public.
+```bash
+npm run dev   # Vite on 5174 (proxies /api) + Express on 3002
+```
 
----
+### Optional: AI interviewer
 
-*Made with ☕ and too many interview rejections-that-taught-things. Good luck — go get the offer.* 🚀
+Copy `.env.example` to `.env` and add your key:
+
+```bash
+GEMINI_API_KEY=your_key_here
+```
+
+Without it, everything — including the live interview room — still works in scripted mode.
+
+### Regenerating the question bank
+
+After editing any file in `client/src/content/`:
+
+```bash
+node scripts/extract-bank.mjs   # rewrites client/src/data/bank.json
+```
+
+## ✍️ Author
+
+**Ayushi Singh** — final-year B.Tech CSE student (AKTU, Ghaziabad), MERN-stack developer.
+
+[LinkedIn](https://www.linkedin.com/in/ayushi0618/) · [Portfolio](https://ayushi-tech-06181.vercel.app) · [GitHub](https://github.com/ayushi0618)
+
+*Good luck — go get the offer.* 🚀

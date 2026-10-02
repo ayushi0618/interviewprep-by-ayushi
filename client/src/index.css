@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------
+   InterviewPrep — "paper notes" article styling.
+   The article body is rendered HTML (from marked), so these rules
+   target raw HTML elements inside .article-body.
+   --------------------------------------------------------------- */
+
+html { scroll-behavior: smooth; }
+body { @apply bg-[#f6f7f4] text-ink font-sans antialiased; }
+
+.article-body {
+  @apply text-[1.05rem] leading-[1.85] text-slate-800;
+  overflow-wrap: break-word;
+}
+.article-body > *:first-child { margin-top: 0; }
+
+.article-body h1 {
+  @apply text-3xl md:text-4xl font-extrabold text-brand-900 leading-tight mt-2 mb-5;
+}
+.article-body h2 {
+  @apply text-2xl font-bold text-brand-900 mt-10 mb-4 pb-2 border-b-2 border-brand-100;
+}
+.article-body h3 { @apply text-xl font-bold text-slate-900 mt-8 mb-3; }
+.article-body h4 { @apply text-lg font-semibold text-slate-900 mt-6 mb-2; }
+.article-body p { @apply my-4; }
+.article-body a { @apply text-brand-700 font-semibold underline decoration-brand-300 underline-offset-2 hover:text-brand-600; }
+.article-body strong { @apply text-slate-900; }
+.article-body ul { @apply my-4 pl-6 space-y-2 list-disc marker:text-brand-500; }
+.article-body ol { @apply my-4 pl-6 space-y-2 list-decimal marker:text-brand-600 marker:font-semibold; }
+.article-body li > p { @apply my-1; }
+.article-body hr { @apply my-8 border-brand-100; }
+
+.article-body blockquote {
+  @apply my-5 pl-4 pr-3 py-1 border-l-4 border-brand-300 bg-brand-50/60 rounded-r-xl italic text-slate-700;
+}
+.article-body blockquote p { @apply my-2; }
+
+.article-body :not(pre) > code {
+  @apply font-mono text-[0.88em] bg-amber-100/80 text-amber-900 px-1.5 py-0.5 rounded-md;
+}
+
+/* code blocks + diagram cards (HTML emitted by lib/markdown.js) */
+.codeblock, .diagram-card {
+  @apply relative my-5 rounded-xl overflow-hidden shadow-card;
+}
+.codeblock { @apply bg-slate-900; }
+.codeblock pre {
+  @apply p-4 pt-8 overflow-x-auto text-[0.9rem] leading-relaxed text-slate-100 font-mono;
+}
+.codeblock .code-lang {
+  @apply absolute top-2 left-3 text-[0.7rem] uppercase tracking-wider text-slate-400 font-semibold;
+}
+.codeblock .copy-btn {
+  @apply absolute top-1.5 right-2 text-[0.72rem] font-semibold bg-white/10 hover:bg-white/20 text-white px-2.5 py-1 rounded-md transition;
+}
+.diagram-card { @apply bg-brand-50 border border-brand-200; }
+.diagram-card .diagram-title {
+  @apply px-4 pt-3 text-sm font-bold text-brand-800;
+}
+.diagram-card pre {
+  @apply px-4 pb-4 pt-1 overflow-x-auto text-[0.85rem] leading-relaxed text-brand-900 font-mono whitespace-pre;
+}
+.article-body pre:not(.codeblock pre):not(.diagram-card pre) {
+  @apply bg-slate-900 text-slate-100 p-4 rounded-xl overflow-x-auto my-5 text-[0.9rem] font-mono shadow-card;
+}
+
+/* tables */
+.article-body table {
+  @apply w-full my-6 text-[0.95rem] border-collapse overflow-hidden rounded-xl shadow-card block md:table overflow-x-auto;
+}
+.article-body thead { @apply bg-brand-700 text-white; }
+.article-body th { @apply text-left font-semibold px-4 py-2.5; }
+.article-body td { @apply px-4 py-2.5 border-t border-brand-100 align-top; }
+.article-body tbody tr:nth-child(even) { @apply bg-brand-50/50; }
+
+/* callouts (GitHub [!NOTE] etc., transformed by lib/markdown.js) */
+.callout {
+  @apply my-6 rounded-xl border-l-4 px-5 py-4 shadow-card;
+}
+.callout .callout-title { @apply font-bold mb-1.5 text-[0.95rem]; }
+.callout p { @apply my-1.5; }
+.callout.note { @apply bg-sky-50 border-sky-500 text-sky-950; }
+.callout.tip { @apply bg-emerald-50 border-emerald-500 text-emerald-950; }
+.callout.important { @apply bg-amber-50 border-amber-500 text-amber-950; }
+.callout.warning { @apply bg-red-50 border-red-500 text-red-950; }
+
+/* collapsible answers */
+.article-body details {
+  @apply my-4 rounded-xl border border-brand-200 bg-white shadow-card overflow-hidden;
+}
+.article-body summary {
+  @apply cursor-pointer px-4 py-3 font-semibold text-brand-800 bg-brand-50 hover:bg-brand-100 select-none;
+}
+.article-body details > *:not(summary) { @apply mx-4; }
+.article-body details pre { @apply my-3; }
+
+/* paper checkboxes for revision checklists */
+.task-box {
+  @apply inline-block w-[1.05em] h-[1.05em] rounded border-2 border-brand-400 align-[-0.15em] mr-1.5 text-center text-[0.8em] leading-none text-brand-700 font-bold bg-white;
+}
+.task-box.done { @apply bg-brand-500 border-brand-500 text-white; }
+
+/* thin scrollbars for sidebar */
+.nice-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.nice-scroll::-webkit-scrollbar-thumb { @apply bg-brand-200 rounded-full; }
