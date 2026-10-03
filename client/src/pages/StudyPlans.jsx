@@ -38,9 +38,9 @@ function ProgressRing({ done, total }) {
   return (
     <span className="relative grid place-items-center w-11 h-11 shrink-0" title={`${done} of ${total} done`}>
       <svg viewBox="0 0 36 36" className="w-11 h-11 -rotate-90">
-        <circle cx="18" cy="18" r="15.5" fill="none" stroke="#ECE8F9" strokeWidth="3.5" />
+        <circle cx="18" cy="18" r="15.5" fill="none" stroke="#E2E8F0" strokeWidth="3.5" />
         <circle
-          cx="18" cy="18" r="15.5" fill="none" stroke="#7C6BD9" strokeWidth="3.5" strokeLinecap="round"
+          cx="18" cy="18" r="15.5" fill="none" stroke="#4F46E5" strokeWidth="3.5" strokeLinecap="round"
           strokeDasharray={`${pct * C} ${C}`}
           className="transition-all duration-500"
         />
@@ -249,7 +249,7 @@ export default function StudyPlans({ onOpenArticle, onOpenProblem, onPractice, o
   // ---------- plan cards (LeetCode-style grid) ----------
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 md:py-10">
+    <div className="page-container page-y">
       <h1 className="text-3xl md:text-4xl font-extrabold text-brand-900">📋 Study Plans</h1>
       <p className="text-slate-600 mt-2 max-w-3xl leading-relaxed">
         Pick a plan, work down the list, tick things off — no dates, no deadlines.

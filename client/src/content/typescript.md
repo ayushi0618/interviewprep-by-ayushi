@@ -485,3 +485,307 @@ If you can say each line out loud the morning of an interview, you're ready.
 - [ ] **React trio** — props via `interface`, `useState<T>` (e.g. `useState<User | null>(null)`), events like `React.ChangeEvent<HTMLInputElement>`
 - [ ] **Utility types** — `Partial` (all optional), `Pick` (keep some), `Omit` (drop some), `Record` (key→value map)
 - [ ] **`as` assertion** — silences the compiler, converts nothing; prefer narrowing. Wrong `as` = compiles, then crashes
+
+
+## 📌 13. Generics Deep Dive — Constraints, `keyof` & Inference
+
+Section 7 covered `<T>` basics. The follow-ups that actually decide interviews are these three: constraining `T`, inferring it, and combining generics.
+
+### Constraining with `extends` — "`T`, but only if…"
+
+A bare `<T>` accepts *anything* — including values your function then tries to read `.length` from:
+
+```ts
+function longest<T>(a: T, b: T): T {
+  // return a.length > b.length ? a : b; // ❌ T might be a number — no .length promised
+}
+```
+
+A **constraint** promises a minimum shape: *"whatever T is, it must at least have this"*:
+
+```ts
+function longest<T extends { length: number }>(a: T, b: T): T {
+  return a.length >= b.length ? a : b;
+}
+longest("hello", "hi");        // string has .length ✅ returns string
+longest([1, 2], [1, 2, 3]);    // array has .length ✅ returns number[]
+longest(10, 20);               // ❌ number has no .length — caught before running
+```
+
+The return type is still the full `T` — the constraint only sets the *entry requirement*. That's the phrase: "extends gives T a floor, not a ceiling."
+
+### `keyof` — types made of an object's keys
+
+`keyof User` is the union `"id" | "name" | "email" | "age"` — the keys as a type. Combined with a constrained generic it produces the most-quoted generic in TypeScript:
+
+```ts
+function getProp<T, K extends keyof T>(obj: T, key: K): T[K] {
+  return obj[key];
+}
+const u = { id: 1, name: "Ayushi", age: 21 };
+getProp(u, "name");  // type: string ✅
+getProp(u, "city");  // ❌ "city" is not a key of that object — typo caught
+```
+
+Read it as: "`K` must be one of `T`'s keys, and the return type is the type of that exact key's value" (`T[K]` — an indexed access type). Two generics, fully tracking each other; this is the shape generic questions are testing whether you've seen.
+
+### Inference — you rarely write `<T>` at call sites
+
+TypeScript *infers* `T` from the arguments you pass; explicit type arguments are the exception (mostly when inference can't see the type, like an empty array or a factory):
+
+```ts
+function first<T>(arr: T[]): T { return arr[0]; }
+const n = first([1, 2, 3]);       // T inferred = number — you never typed <number>
+const made = first<string>([]);   // explicit: nothing to infer FROM an empty array
+```
+
+A function can carry **several** independent type parameters too — `function pair<A, B>(a: A, b: B): [A, B]` — each inferred separately, which is exactly how real libraries type things like `useState<T>` and `Promise<T>`.
+
+### Generic interfaces & defaults
+
+Generics live happily on interfaces (Section 7's `ApiResponse<T>`), and can have **defaults** like function parameters:
+
+```ts
+interface ApiResponse<T = unknown> { data: T; success: boolean }
+const loose: ApiResponse = { data: 42, success: true };        // T defaults to unknown
+const users: ApiResponse<User[]> = { data: [], success: true };
+```
+
+> [!WARNING]
+> **Common mistake:** reaching for a generic when one concrete type would do — `function total<T extends number>` cargo-culted onto a function that only ever sees numbers. Generics earn their place only when input and output types genuinely vary or must stay connected. Simplicity is also a type-system skill.
+
+```playground Playground: the getProp idea (runtime side)
+function getProp(obj, key) { return obj[key]; }
+const u = { id: 1, name: "Ayushi", age: 21 };
+console.log(getProp(u, "name"));
+// In TS, getProp<T, K extends keyof T>(obj: T, key: K): T[K] would
+// (a) reject "city" at write-time and (b) type this next line as number:
+console.log(getProp(u, "age") + 1);
+```
+
+**🎤 What the interviewer actually asks:** *"What is a generic constraint?"*, *"What does `keyof` do?"*, and the practical one — *"Do you have to specify `<T>` when calling a generic function?"* (almost never; it infers).
+
+## 📌 14. Discriminated Unions & Exhaustive Checks
+
+Section 8 met a two-shape union with a `kind` field. Used deliberately, that field — the **discriminant** — turns unions into the cleanest state modelling TypeScript offers.
+
+### Tag every variant with a literal
+
+```ts
+type Result =
+  | { status: "loading" }
+  | { status: "success"; data: string[] }
+  | { status: "error"; message: string };
+
+function render(r: Result): string {
+  switch (r.status) {
+    case "loading": return "Loading…";              // r is exactly the loading variant
+    case "success": return r.data.join(", ");       // r.data is available ONLY here ✅
+    case "error": return "Failed: " + r.message;    // r.message only here ✅
+  }
+}
+```
+
+Each branch narrows to one exact variant — properties that don't exist on other variants are simply *unreadable* (an error, not a runtime surprise). The pattern wins because invalid combinations become unrepresentable: there is no object that is both `status: "success"` and missing `data`. Compare the beginner alternative — one interface with `data?` and `message?` optional and flags everywhere — where "success with an error message" is perfectly typeable and inevitably happens at runtime.
+
+Real homes for this: an API response type (fetching/idle/failed/ready), a form wizard step, a payment state, a Redux-style action union — `{ type: "add"; item: Product } | { type: "remove"; id: number }` is the same idea wearing a `type` tag.
+
+### Exhaustive checks — the compiler as a checklist
+
+Now add a fourth variant, `{ status: "empty" }`. Every `switch` you ever wrote silently falls through for it. The **exhaustiveness check** makes the compiler list every place needing the new case:
+
+```ts
+function assertNever(x: never): never {
+  throw new Error("Unhandled variant: " + JSON.stringify(x));
+}
+
+function render(r: Result): string {
+  switch (r.status) {
+    case "loading": return "Loading…";
+    case "success": return r.data.join(", ");
+    case "error": return "Failed: " + r.message;
+    default: return assertNever(r); // ✅ compiles only while every variant is handled
+  }
+}
+```
+
+The logic: in the `default` branch, if all variants are handled, `r` has been narrowed to **nothing** — `never` — so passing it to `assertNever` type-checks. Add `"empty"` without a case, and `r` in `default` is the empty variant — *not* `never` — and the error points precisely at the unfinished function. `never`, for the first time, doing something genuinely useful.
+
+> [!TIP]
+> The `never` type reads strangely until this example: it's the empty set of values. A function returning `never` never returns (it throws or loops forever), and a variable narrowed to `never` means "this point is unreachable" — exhaustive checks turn "unreachable" into "proof all cases handled."
+
+> [!WARNING]
+> **The trap:** discriminating on a field typed as plain `string` (`status: string`) kills the whole pattern — TypeScript can't narrow on values it doesn't know exactly. The tag must be **literal types** (`"success" | "error"...`). If the discriminant can be any string, there is nothing to discriminate.
+
+**🎤 What the interviewer actually asks:** *"How do you model a value that can be in different states with different data?"* — discriminated union + switch narrowing (+ `assertNever` if they push on "how do you know you handled everything?").
+
+## 📌 15. Advanced Typing Patterns — Mapped & Conditional Types
+
+Section 11's utility types aren't magic — they're applications of two general mechanisms. You won't write these daily; you must be able to *read* them, because every real codebase and library contains them.
+
+### Mapped types — transform every property of a type
+
+A mapped type loops over a type's keys and rebuilds it, the way `Array.map` loops over values (that's where the name comes from):
+
+```ts
+type MakeOptional<T> = { [K in keyof T]?: T[K] };
+type MakeReadonly<T> = { readonly [K in keyof T]: T[K] };
+```
+
+`[K in keyof T]` reads as "for each key K of T." The `?` and `readonly` are **modifiers** the mapping adds. And `Partial<T>` from Section 11 is, quite literally, TypeScript's built-in `MakeOptional` — which is why utilities are learnable: they're small mapped types with famous names.
+
+### Conditional types — a ternary for types
+
+```ts
+type IsString<T> = T extends string ? "yes" : "no";
+type A = IsString<"hello">; // "yes"
+type B = IsString<number>;  // "no"
+```
+
+`T extends X ? A : B` asks "is T assignable to X?" and picks a branch — the exact `extends` question from Section 13's constraints, used as a decision. Real utilities chain these: `NonNullable<T> = T extends null | undefined ? never : T` — "if T is the empty case, erase it; else keep T."
+
+### `infer` — pulling a type out of another type
+
+Inside a conditional, `infer` lets you *capture* a piece of the matched shape and reuse it. It's how the built-in `ReturnType` works:
+
+```ts
+type MyReturnType<F> = F extends (...args: any[]) => infer R ? R : never;
+type Fn = (id: number) => Promise<string>;
+type Out = MyReturnType<Fn>; // Promise<string> — R captured the return position
+```
+
+Read `infer R` as "whatever turns up in this slot, call it R." Other built-ins built the same way: `Parameters<F>` (captures the argument tuple), `Awaited<T>` (unwraps a promise's inner type). You now know how to read every one of them.
+
+### Template literal types — the readable party trick
+
+Types can be built by string interpolation, producing every combination:
+
+```ts
+type Size = "small" | "large";
+type Item = "shirt" | "mug";
+type Product = `${Size}-${Item}`; // "small-shirt" | "small-mug" | "large-shirt" | "large-mug"
+```
+
+Mainly useful for event names, CSS-ish prop unions, and API route shapes in libraries. One demo is enough: *"TypeScript can compute unions of strings at the type level, too."*
+
+> [!WARNING]
+> **The fresher trap:** writing conditional/mapped types to look senior. Interviewers follow up with "now explain it to a junior on the team" — if you can't say it in one plain sentence ("this loops over the keys and makes each one optional"), don't ship it. Advanced types serve the team; they never exist to impress.
+
+```playground Playground: a mapped-type idea in plain JS
+// Partial<User> at runtime looks like this: same keys, values untouched.
+// Mapped types do this to the TYPE — the emitted JS contains none of it.
+function cloneShape(obj) { return Object.keys(obj); }
+const user = { id: 1, name: "Ayushi", email: "a@b.com" };
+console.log(cloneShape(user)); // ["id", "name", "email"] — the keys a mapped type iterates
+```
+
+**🎤 What the interviewer actually asks:** *"What is a mapped type?"* (rebuild a type key-by-key — `Partial` is one), *"What is a conditional type?"* (type-level ternary on `extends`), and, if your resume claims advanced TS, *"What does `infer` do?"*
+
+## 📌 16. TypeScript with React — Deep Dive Patterns
+
+Section 10 covered the trio (props, `useState<T>`, change events). Real components ask for four more patterns.
+
+### Children — the right types
+
+```tsx
+function Card({ children }: { children: React.ReactNode }) {
+  return <section className="card">{children}</section>;
+}
+```
+
+`React.ReactNode` = "anything renderable" — JSX, strings, numbers, null, arrays of those. Use it for layout/wrapper components. (`React.ReactElement` exists and is narrower — just elements; `ReactNode` is the correct default for `children`.)
+
+### Refs — two jobs, two typings
+
+```tsx
+const inputRef = useRef<HTMLInputElement>(null);        // DOM element → initial null, generic = element type
+inputRef.current?.focus();                              // ?. because it may not be attached yet
+
+const renderCount = useRef(0);                          // plain value → generic inferred (number)
+renderCount.current += 1;
+```
+
+The trap from Section 10, ref version: `useRef<HTMLInputElement>()` without an initial argument or generic makes `.current` `undefined`-only and miserable. Element ref = element type + `null` start, and always touch it via `?.`.
+
+### Event types — the table worth memorising
+
+| Handler | Type |
+|---|---|
+| `onChange` on `<input>` | `React.ChangeEvent<HTMLInputElement>` |
+| `onSubmit` on `<form>` | `React.FormEvent<HTMLFormElement>` |
+| `onClick` on `<button>` | `React.MouseEvent<HTMLButtonElement>` |
+| `onKeyDown` | `React.KeyboardEvent<HTMLInputElement>` |
+
+The element in the generic changes with the tag — `<textarea>` uses `HTMLTextAreaElement`. Inline handlers (`onChange={e => ...}`) infer all of this automatically; you only *write* event types when extracting a named handler function — which is when interviewers check.
+
+### Generics in components & typed reducers
+
+A list component that works for any item type is a textbook generic component:
+
+```tsx
+interface ListProps<T> { items: T[]; renderItem: (item: T) => React.ReactNode; }
+function List<T>({ items, renderItem }: ListProps<T>) {
+  return <ul>{items.map((item, i) => <li key={i}>{renderItem(item)}</li>)}</ul>;
+}
+<List items={users} renderItem={u => u.name} />   // renderItem's u is fully typed as User
+```
+
+And `useReducer` gets its discipline from a discriminated-union action type (Section 14):
+
+```tsx
+type Action = { type: "increment" } | { type: "set"; value: number };
+function reducer(state: number, action: Action): number {
+  switch (action.type) {
+    case "increment": return state + 1;
+    case "set": return action.value;   // value exists only on this variant ✅
+  }
+}
+const [count, dispatch] = useReducer(reducer, 0);
+dispatch({ type: "set", value: 5 });  // typo in type, or missing value → write-time error
+```
+
+> [!WARNING]
+> **The recurring mistake:** typing a reusable component's props with one concrete project type (`users: User[]`) so it can never render products. If a prop's type genuinely varies, that's the generic signal; if it never varies, don't genericise (Section 13's warning, component edition).
+
+**🎤 What the interviewer actually asks:** *"How do you type children?"*, *"How do you type a ref to an input?"*, *"How do you type extracted event handlers?"*, and — the senior follow-up — *"How would you make this list component reusable for any data?"*
+
+## 📌 17. tsconfig & Strictness — The Settings That Actually Matter
+
+`tsconfig.json` is how a project *configures the checker itself*. Section 11B covered the `strict` family; this chapter is the rest of the file, at "know what each line is for" depth.
+
+### The six lines every project has
+
+```jsonc
+{
+  "compilerOptions": {
+    "target": "ES2022",          // the JS version TypeScript OUTPUTS (syntax sugar is compiled away to this level)
+    "module": "ESNext",          // how import/export is written in the output (bundlers want ESM-style)
+    "moduleResolution": "bundler", // how imports are found (Vite/Webpack style; "node" is the legacy mode)
+    "jsx": "react-jsx",          // JSX compiles using React's automatic runtime (no import React needed)
+    "strict": true,              // the Section 11B family — non-negotiable
+    "esModuleInterop": true,     // smoothes mixing CommonJS packages with ES imports
+    "forceConsistentCasingInFileNames": true
+  }
+}
+```
+
+The mind-model: **target/module decide what the output looks like; strict decides how hard the checker checks; the rest removes friction.** Files are transformed (types stripped, newer syntax rewritten down to `target`), never type-checked *at runtime* — worth repeating with the Section 1 warning that runtime data still needs validation.
+
+### `noUncheckedIndexedAccess` — the strict-extra that earns its mention
+
+Beyond the `strict` family, this individual flag makes array/object indexing honest: `arr[0]` types as `T | undefined`, because the element *might not exist*. It prevents a whole species of "cannot read property of undefined" crashes in loops and lookups — naming it shows you've read a real tsconfig, not a tutorial one.
+
+### Type-only imports and `.d.ts` files — the remaining vocabulary
+
+- `import type { User } from "./types"` — imports a type with a guarantee it disappears entirely from the output JS (and it prevents accidental runtime imports of pure-type modules).
+- **Declaration files** (`.d.ts`) — type information *without implementation*: how TypeScript knows the shape of a plain-JS library. Packages ship them, or they live in `@types/...` packages (`npm i -D @types/node`). "Types for a library live in its .d.ts files" answers the how-does-TS-know-about-JS-libraries question.
+
+### The strictness ladder — what to say when it comes up
+
+Start a project with `"strict": true` and grow (`noUncheckedIndexedAccess`) rather than weakening. Turning flags off later to meet a deadline is field-repairable; migrating a lax codebase *to* strictness is a project of its own — the strongest practical argument for keeping strict on from day one.
+
+> [!WARNING]
+> **Interview traps, tsconfig edition:** (1) "Does a higher `target` make code faster?" — no, it just leaves newer syntax as-is instead of rewriting it. (2) "strict affects the output JS?" — errors only; emitted JS is the same (and TypeScript emits JS even with type errors, unless `noEmitOnError` — that's why "it compiled" never proves "it type-checked"). (3) Editing `tsconfig` mid-project without a full re-check — the checker only re-proves what the new settings demand.
+
+**🎤 What the interviewer actually asks:** *"What's in your tsconfig?"* (target/strict/jsx is plenty), *"How does TypeScript know the types of a JavaScript library?"* (.d.ts files / @types), and *"Does TypeScript emit code when there are type errors?"* (yes by default — a famous gotcha).
+

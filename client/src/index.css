@@ -2,19 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ---------------------------------------------------------------
-   InterviewPrep — "paper notes" article styling.
-   The article body is rendered HTML (from marked), so these rules
-   target raw HTML elements inside .article-body.
-   --------------------------------------------------------------- */
+/* ================================================================
+   InterviewPrep — professional design system (single source).
+   Palette: deep slate/ink neutrals + refined indigo primary +
+   one restrained accent (deep teal, for live/CTA moments only).
+   Difficulty colors stay semantic: emerald / amber / rose.
+   The `brand-*` Tailwind scale (tailwind.config.js) mirrors
+   --indigo-* below; keep the two in sync.
+   ================================================================ */
+:root {
+  /* primary — indigo */
+  --indigo-50: #EEF2FF;  --indigo-100: #E0E7FF; --indigo-200: #C7D2FE;
+  --indigo-300: #A5B4FC; --indigo-400: #818CF8; --indigo-500: #6366F1;
+  --indigo-600: #4F46E5; --indigo-700: #4338CA; --indigo-800: #3730A3;
+  --indigo-900: #312E81; --indigo-950: #1E1B4B;
+  /* neutrals — slate */
+  --ink-900: #0F172A; --ink-700: #334155; --ink-500: #64748B; --ink-400: #94A3B8;
+  --line: #E2E8F0;        /* default border on white */
+  --bg: #F8FAFC;          /* page background (paper) */
+  --surface: #FFFFFF;
+  /* accent — deep teal, used sparingly (mock room / NEW) */
+  --accent: #0F766E; --accent-hover: #115E59; --accent-soft: #F0FDF9;
+  /* semantic difficulty */
+  --easy-bg: #ECFDF5; --easy-fg: #047857; --easy-line: #A7F3D7;
+  --med-bg: #FFFBEB;  --med-fg: #B45309;  --med-line: #FDE68A;
+  --hard-bg: #FFF1F2; --hard-fg: #BE123C; --hard-line: #FECDD3;
+  /* shape + elevation */
+  --radius: 1rem;         /* cards */
+  --radius-sm: 0.75rem;   /* rows, inputs */
+  --shadow-card: 0 1px 2px rgba(15,23,42,.05), 0 4px 16px -8px rgba(15,23,42,.10);
+  --shadow-card-hover: 0 2px 4px rgba(15,23,42,.06), 0 12px 32px -12px rgba(15,23,42,.16);
+  /* type scale: page title / section title / card title / body / caption
+     = 4xl / 2xl-3xl / lg / base / xs — applied via Tailwind classes */
+}
 
 html { scroll-behavior: smooth; }
-body { @apply bg-[#FCFAFF] text-ink font-sans antialiased; }
+body { @apply bg-paper text-ink font-sans antialiased; }
 /* Reserve space for the fixed mobile bottom nav */
 @media (max-width: 1023px) {
   body { padding-bottom: 3.75rem; }
 }
 
+/* ---------------------------------------------------------------
+   Layout primitives — one shell + section rhythm for every page.
+   Pages: <div class="page-container page-y"> … </div>
+   Sections: eyebrow → title → sub, then content (section pattern).
+   --------------------------------------------------------------- */
+.page-container { @apply max-w-7xl mx-auto px-4; }
+.page-y { @apply py-8 md:py-10; }
+.section-y { @apply py-10 md:py-12; }
+.section-eyebrow { @apply text-[0.7rem] font-extrabold uppercase tracking-[0.14em] text-brand-600; }
+.section-title { @apply text-2xl md:text-3xl font-extrabold text-brand-900 leading-tight; letter-spacing: -0.01em; }
+.section-sub { @apply text-slate-600 mt-1 leading-relaxed; }
+
+/* Card pattern (white surface, hairline border, soft slate shadow) */
+.card { @apply bg-white border border-slate-200 rounded-2xl shadow-card; }
+
+/* Chips + tags */
+.chip { @apply inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-bold text-slate-600; }
+.badge-accent { @apply inline-flex items-center rounded-full bg-[#0D9488] px-2 py-0.5 text-[0.65rem] font-extrabold text-white; }
+
+/* Inputs */
+.input { @apply w-full rounded-xl border border-brand-200 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100; }
+
+/* ---------------------------------------------------------------
+   Article body ("paper notes") — rendered HTML from marked.
+   --------------------------------------------------------------- */
 .article-body {
   @apply text-[1.05rem] leading-[1.85] text-slate-800;
   overflow-wrap: break-word;
@@ -43,7 +96,7 @@ body { @apply bg-[#FCFAFF] text-ink font-sans antialiased; }
 .article-body blockquote p { @apply my-2; }
 
 .article-body :not(pre) > code {
-  @apply font-mono text-[0.88em] bg-amber-100/80 text-amber-900 px-1.5 py-0.5 rounded-md;
+  @apply font-mono text-[0.88em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded-md;
 }
 
 /* code blocks + diagram cards (HTML emitted by lib/markdown.js) */
@@ -77,8 +130,8 @@ body { @apply bg-[#FCFAFF] text-ink font-sans antialiased; }
 }
 .article-body thead { @apply bg-brand-700 text-white; }
 .article-body th { @apply text-left font-semibold px-4 py-2.5; }
-.article-body td { @apply px-4 py-2.5 border-t border-brand-100 align-top; }
-.article-body tbody tr:nth-child(even) { @apply bg-brand-50/50; }
+.article-body td { @apply px-4 py-2.5 border-t border-slate-200 align-top; }
+.article-body tbody tr:nth-child(even) { @apply bg-slate-50; }
 
 /* callouts (GitHub [!NOTE] etc., transformed by lib/markdown.js) */
 .callout {
@@ -93,7 +146,7 @@ body { @apply bg-[#FCFAFF] text-ink font-sans antialiased; }
 
 /* collapsible answers */
 .article-body details {
-  @apply my-4 rounded-xl border border-brand-200 bg-white shadow-card overflow-hidden;
+  @apply my-4 rounded-xl border border-slate-200 bg-white shadow-card overflow-hidden;
 }
 .article-body summary {
   @apply cursor-pointer px-4 py-3 font-semibold text-brand-800 bg-brand-50 hover:bg-brand-100 select-none;
@@ -109,14 +162,19 @@ body { @apply bg-[#FCFAFF] text-ink font-sans antialiased; }
 
 /* ---------------------------------------------------------------
    Shared UI primitives — one button/chip/card system for every
-   page (home, sheet, plans, problem, playground). Difficulty chips:
-   Easy → lavender, Medium → amber, Hard → rose.
+   page (home, sheet, plans, problem, playground). Difficulty:
+   Easy → emerald, Medium → amber, Hard → rose (semantic).
    --------------------------------------------------------------- */
 .btn-primary {
   @apply inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 py-2.5 font-bold text-white shadow-card transition hover:bg-brand-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
 }
+.btn-accent {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 font-bold text-white shadow-card transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+  background: var(--accent);
+}
+.btn-accent:hover { background: var(--accent-hover); }
 .btn-outline {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-brand-200 bg-white px-5 py-2.5 font-bold text-brand-800 shadow-card transition hover:border-brand-400 hover:bg-brand-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 font-bold text-brand-800 shadow-card transition hover:border-brand-400 hover:bg-brand-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50;
 }
 .card-hover {
   @apply transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-card-hover;
@@ -124,15 +182,15 @@ body { @apply bg-[#FCFAFF] text-ink font-sans antialiased; }
 .diff-easy, .diff-medium, .diff-hard {
   @apply inline-flex items-center rounded-full border px-2 py-0.5 text-[0.7rem] font-bold leading-none;
 }
-.diff-easy { background: #ECE8F9; color: #5744A8; border-color: #D9D1F2; }
-.diff-medium { background: #fff6e0; color: #9a6a00; border-color: #ffe1a1; }
-.diff-hard { background: #ffeef1; color: #d81f4b; border-color: #ffc2d1; }
+.diff-easy { background: var(--easy-bg); color: var(--easy-fg); border-color: var(--easy-line); }
+.diff-medium { background: var(--med-bg); color: var(--med-fg); border-color: var(--med-line); }
+.diff-hard { background: var(--hard-bg); color: var(--hard-fg); border-color: var(--hard-line); }
 
-::selection { background: #D9D1F2; }
+::selection { background: #C7D2FE; }
 
 /* thin scrollbars for sidebar */
 .nice-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-.nice-scroll::-webkit-scrollbar-thumb { @apply bg-brand-200 rounded-full; }
+.nice-scroll::-webkit-scrollbar-thumb { @apply bg-slate-300 rounded-full; }
 
 /* ---------------------------------------------------------------
    Interactive visualizers (client/src/components/visuals/*).

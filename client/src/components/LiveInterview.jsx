@@ -348,6 +348,11 @@ function loadSessions() {
   try { return JSON.parse(localStorage.getItem(SESSION_KEY)) || []; } catch { return []; }
 }
 
+const VOICE_KEY = 'ip_voice_on';
+function loadVoicePref() {
+  try { const v = localStorage.getItem(VOICE_KEY); return v === null ? true : v === '1'; } catch { return true; }
+}
+
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
 // --- Session API (the real interviewer) --------------------------------------
@@ -383,7 +388,7 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
   const [difficulty, setDifficulty] = useState('Medium');
   const [useCamera, setUseCamera] = useState(true);
   const [useMic, setUseMic] = useState(true);
-  const [voiceOn, setVoiceOn] = useState(true);
+  const [voiceOn, setVoiceOn] = useState(loadVoicePref);
   const [mediaMode, setMediaMode] = useState('av'); // av | audio | text
   const [mediaNote, setMediaNote] = useState('');
   const [entries, setEntries] = useState([]); // {from, text, scoreRef?, kind?, round?, skipped?}
@@ -405,12 +410,14 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
   const finishingRef = useRef(false);
   const streamRef = useRef(null);
   const recRef = useRef(null);
+  const dictBaseRef = useRef('');
   const videoRef = useRef(null);
   const bottomRef = useRef(null);
   const startedAtRef = useRef(null);
   const qStartRef = useRef(null);
 
   const sttAvailable = useMemo(() => hasRecognition(), []);
+  const ttsAvailable = useMemo(() => typeof window !== 'undefined' && 'speechSynthesis' in window, []);
   const localSlug = FOCUS_TO_SLUG[focus] || 'javascript';
   const localTopicTitle = TOPICS.find((t) => t.slug === localSlug)?.title || focus;
   const answerWords = useMemo(() => (answer.trim() ? answer.trim().split(/\s+/).length : 0), [answer]);
@@ -431,7 +438,16 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
   // Keep the transcript scrolled to the latest message
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [entries, thinking]);
 
-  useEffect(() => () => { stopSpeaking(); streamRef.current?.getTracks().forEach((t) => t.stop()); }, []);
+  // Remember the interviewer-voice choice across visits
+  useEffect(() => {
+    try { localStorage.setItem(VOICE_KEY, voiceOn ? '1' : '0'); } catch { /* storage blocked — choice just won't persist */ }
+  }, [voiceOn]);
+
+  useEffect(() => () => {
+    stopSpeaking();
+    try { recRef.current?.rec.stop(); } catch { /* recognizer already stopped */ }
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+  }, []);
 
   const attachStream = () => {
     if (videoRef.current && streamRef.current) videoRef.current.srcObject = streamRef.current;
@@ -441,6 +457,16 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
     entriesRef.current = next;
     setEntries(next);
   }
+
+  // Speak Ananya's words aloud (feedback first, then the question) whenever
+  // the voice is on and this browser can synthesize speech.
+  const speakNow = (parts) => {
+    if (!voiceOn || !ttsAvailable) return;
+    const text = parts.filter(Boolean).join(' ').trim();
+    if (text) speak(text);
+  };
+
+  const toggleVoice = () => setVoiceOn((v) => { if (v) stopSpeaking(); return !v; });
 
   // --- Local ladder plumbing (fallback path only) ---------------------------
   function initLocalMidState() {
@@ -459,7 +485,7 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
     const all = [...baseEntries, ...additions];
     setEntriesBoth(all);
     qStartRef.current = Date.now(); setQElapsed(0);
-    if (voiceOn && res.text) speak(res.text);
+    speakNow([res.feedback, res.text]);
     if (res.done) finishInterview(all, { localOnly: true });
   }
 
@@ -564,7 +590,7 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
       setExchange(data.exchange || 0);
       const first = [{ from: 'interviewer', text: data.text, kind: 'question' }];
       setEntriesBoth(first);
-      if (voiceOn && data.text) speak(data.text);
+      speakNow([data.text]);
     } catch {
       // Session API unreachable — run the local scripted ladder instead of
       // dead-ending (the ladder's only remaining job).
@@ -580,11 +606,19 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
 
   function toggleListening() {
     if (listening) {
-      recRef.current?.rec.stop();
+      try { recRef.current?.rec.stop(); } catch { /* already stopped */ }
       setListening(false);
       return;
     }
-    const r = createRecognizer({ onInterim: (text) => setAnswer(text) });
+    stopSpeaking();
+    // Dictation appends after whatever is already typed — never wipes it.
+    dictBaseRef.current = answer.trim();
+    const r = createRecognizer({
+      onInterim: (text) => {
+        const base = dictBaseRef.current;
+        setAnswer(base ? `${base} ${text}` : text);
+      },
+    });
     if (!r) return;
     recRef.current = r;
     r.rec.onend = () => setListening(false);
@@ -614,7 +648,7 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
         const all = [...newEntries, ...additions];
         setEntriesBoth(all);
         qStartRef.current = Date.now(); setQElapsed(0);
-        if (voiceOn && data.text) speak(data.text);
+        speakNow([data.feedback, data.text]);
         setThinking(false);
         if (data.done) finishInterview(all);
         return;
@@ -643,7 +677,7 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
         additions.push({ from: 'interviewer', text: data.text, kind: 'hint' });
         const all = [...entriesRef.current, ...additions];
         setEntriesBoth(all);
-        if (voiceOn && data.text) speak(data.text);
+        speakNow([data.feedback, data.text]);
         setThinking(false);
         return;
       } catch {
@@ -753,10 +787,12 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
               <input type="checkbox" checked={useMic} onChange={(e) => setUseMic(e.target.checked)} className="w-4 h-4 accent-brand-600" />
               <span className="text-sm font-semibold">🎙️ Microphone</span>
             </label>
-            <label className="flex items-center gap-2.5 bg-brand-50 border border-brand-100 rounded-xl px-4 py-3 cursor-pointer">
-              <input type="checkbox" checked={voiceOn} onChange={(e) => setVoiceOn(e.target.checked)} className="w-4 h-4 accent-brand-600" />
-              <span className="text-sm font-semibold">🔊 Interviewer voice</span>
-            </label>
+            {ttsAvailable && (
+              <label className="flex items-center gap-2.5 bg-brand-50 border border-brand-100 rounded-xl px-4 py-3 cursor-pointer">
+                <input type="checkbox" checked={voiceOn} onChange={(e) => setVoiceOn(e.target.checked)} className="w-4 h-4 accent-brand-600" />
+                <span className="text-sm font-semibold">🔊 Interviewer voice</span>
+              </label>
+            )}
           </div>
           {!sttAvailable && (
             <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-4">
@@ -813,9 +849,18 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
           {/* Conversation */}
           <div className="bg-white rounded-2xl shadow-card border border-brand-100 flex flex-col overflow-hidden">
             <div className="px-5 py-3 border-b border-brand-100">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <p className="font-extrabold text-brand-900">👩‍💻 Ananya · Senior Software Engineer</p>
-                <span className="text-xs bg-brand-50 border border-brand-100 px-2 py-1 rounded-md font-semibold text-brand-700">{badge} · {focus} · {difficulty}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs bg-brand-50 border border-brand-100 px-2 py-1 rounded-md font-semibold text-brand-700">{badge} · {focus} · {difficulty}</span>
+                  {ttsAvailable && (
+                    <button onClick={toggleVoice}
+                      className="px-3 py-1.5 rounded-xl bg-white border border-brand-200 text-xs font-bold text-brand-800 shadow-card"
+                      title={voiceOn ? 'Mute Ananya' : 'Unmute Ananya'}>
+                      {voiceOn ? '🔊 Voice on' : '🔇 Voice off'}
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="flex items-center justify-between gap-2 mt-2">
                 <p className="text-xs font-bold text-slate-500">Exchange {Math.min(exchange + 1, MAX_EXCHANGES)} of {MAX_EXCHANGES} · {exchange} answered</p>
@@ -847,7 +892,7 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
 
             <div className="border-t border-brand-100 p-4 bg-brand-50/50">
               <p className="text-xs font-semibold text-slate-400 mb-2">⏱ {qMmss} on this question</p>
-              <textarea value={answer} onChange={(e) => setAnswer(e.target.value)} rows={3}
+              <textarea value={answer} onChange={(e) => { stopSpeaking(); setAnswer(e.target.value); }} rows={3}
                 placeholder={sttAvailable ? 'Speak with the mic button, or type your answer here…' : 'Type your answer here…'}
                 className="w-full rounded-xl border border-brand-200 px-4 py-3 text-[0.95rem] outline-none focus:ring-2 focus:ring-brand-400 resize-none" />
               {answerWords > 0 && answerWords < 10 && (
@@ -871,10 +916,6 @@ export default function LiveInterview({ initialTopic, onReadTopic }) {
                 <button onClick={() => submitAnswer({ skipped: true })} disabled={thinking}
                   className="px-4 py-2.5 rounded-xl bg-white border border-brand-200 text-sm font-bold text-slate-600 disabled:opacity-50">
                   Skip ⏭
-                </button>
-                <button onClick={() => setVoiceOn((v) => { if (v) stopSpeaking(); return !v; })}
-                  className="px-3 py-2.5 rounded-xl bg-white border border-brand-200 text-sm" title="Toggle interviewer voice">
-                  {voiceOn ? '🔊' : '🔇'}
                 </button>
               </div>
               {listening && <p className="text-xs text-red-500 font-semibold mt-2">Listening… speak now, your words appear above.</p>}

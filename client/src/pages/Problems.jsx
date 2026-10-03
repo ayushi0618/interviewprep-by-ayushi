@@ -21,12 +21,12 @@ const SORT_OPTIONS = [
 ];
 const DIFFICULTY_RANK = { Easy: 0, Medium: 1, Hard: 2 };
 
-// Difficulty chips in Tailwind classes only — brand (lavender, once the
+// Difficulty chips in Tailwind classes only — emerald (once the
 // central recolor lands) for Easy, amber for Medium, rose for Hard.
 function difficultyChipClass(difficulty) {
   switch (difficulty) {
     case 'Easy':
-      return 'bg-brand-50 text-brand-700 border-brand-200';
+      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
     case 'Medium':
       return 'bg-amber-50 text-amber-700 border-amber-200';
     case 'Hard':
@@ -125,7 +125,7 @@ export default function Problems({ onProblem }) {
     'rounded-xl border border-brand-200 bg-white px-3 py-2 text-sm font-semibold text-brand-800 shadow-card transition hover:border-brand-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100';
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 md:py-10">
+    <div className="page-container page-y">
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>

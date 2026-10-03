@@ -1,32 +1,37 @@
-/** Tailwind config — lavender theme: primary lavender
- *  (#7C6BD9 at brand-500), clean white surfaces, soft paper article cards. */
+/** Tailwind config — professional design system.
+ *  Primary: refined indigo (brand-*). Neutrals: slate (paper/ink +
+ *  tailwind slate-*). One restrained accent (deep teal) lives in
+ *  index.css as .btn-accent / .badge-accent; difficulty colors are
+ *  semantic (emerald/amber/rose) via .diff-* in index.css.
+ *  Tokens documented as CSS variables in src/index.css (:root). */
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
     extend: {
       colors: {
         brand: {
-          50: '#F6F4FC',
-          100: '#ECE8F9',
-          200: '#D9D1F2',
-          300: '#BCAEE8',
-          400: '#9D8ADB',
-          500: '#7C6BD9',
-          600: '#6A55C7',
-          700: '#5744A8',
-          800: '#483A85',
-          900: '#3B3169',
+          50: '#EEF2FF',
+          100: '#E0E7FF',
+          200: '#C7D2FE',
+          300: '#A5B4FC',
+          400: '#818CF8',
+          500: '#6366F1',
+          600: '#4F46E5',
+          700: '#4338CA',
+          800: '#3730A3',
+          900: '#312E81',
+          950: '#1E1B4B',
         },
-        paper: '#FCFAFF',
-        ink: '#1f2937',
+        paper: '#F8FAFC',
+        ink: '#0F172A',
       },
       fontFamily: {
         sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       boxShadow: {
-        card: '0 1px 3px rgba(87,68,168,.08), 0 8px 24px -12px rgba(87,68,168,.18)',
-        'card-hover': '0 2px 6px rgba(87,68,168,.10), 0 18px 36px -12px rgba(87,68,168,.28)',
+        card: '0 1px 2px rgba(15,23,42,.05), 0 4px 16px -8px rgba(15,23,42,.10)',
+        'card-hover': '0 2px 4px rgba(15,23,42,.06), 0 12px 32px -12px rgba(15,23,42,.16)',
       },
     },
   },

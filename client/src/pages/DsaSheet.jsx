@@ -104,7 +104,7 @@ export default function DsaSheet({ onOpenProblem }) {
     `${chipBase} ${active ? 'bg-brand-600 text-white border-brand-600 shadow-card' : 'bg-white text-brand-800 border-brand-200 hover:border-brand-400 hover:bg-brand-50'}`;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 md:py-10">
+    <div className="page-container page-y">
       {/* Header + overall progress */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>

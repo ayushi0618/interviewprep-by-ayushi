@@ -740,3 +740,801 @@ Sliding window. Positivity makes it valid: expanding only increases the sum and 
 
 > [!NOTE]
 > 📌 **Final word:** DSA interviews reward *narrating your thinking*. Brute force first, name the bottleneck, pick the pattern, state the complexity. Practice that loop out loud on 2 problems a day and you'll sound like someone who solves problems — because you will be. Good luck! 🚀
+
+---
+
+## 15. Sliding Window Deep Dive — Templates You Can Copy-Paste
+
+Section 5 gave you the idea. This chapter gives you the **exact skeletons** so you never have to reinvent the window mid-interview. The trick is that almost every sliding window problem is the same loop wearing a different condition.
+
+> [!NOTE]
+> 📌 **The one sentence to remember:** Move `right` one step at a time, keep your window *valid*, and every index enters and leaves the window at most once — that is why the whole thing is O(n), not O(n²).
+
+### The fixed-window template
+
+Use this when the window size `k` is given and never changes ("max sum of any subarray of size k", "average of every window of size k").
+
+```js
+function maxSumFixed(nums, k) {
+  let windowSum = 0;
+  // build the first window
+  for (let i = 0; i < k; i++) windowSum += nums[i];
+  let best = windowSum;
+  // slide: add what enters, subtract what leaves
+  for (let right = k; right < nums.length; right++) {
+    windowSum += nums[right];       // new element enters
+    windowSum -= nums[right - k];   // old element leaves
+    best = Math.max(best, windowSum);
+  }
+  return best;
+}
+```
+
+**Why it is fast:** the first window costs O(k), and each slide after that is O(1). Total time is O(n). Extra space is O(1) — just two numbers.
+
+> [!TIP]
+> 🧠 Say this out loud: *"I compute the first window once, then each new window is the old window minus the element that fell out plus the element that just came in."* Interviewers love hearing "subtract what leaves, add what enters" word for word.
+
+### The variable-window template (shrink-while-invalid)
+
+Use this when you want the **longest** or **shortest** valid window and the size is not fixed. `right` only expands; `left` chases it to restore validity.
+
+```js
+function longestValid(nums, isValid) {
+  let left = 0;
+  let best = 0;
+  // window state lives here (sum, frequency map, count, ...)
+  for (let right = 0; right < nums.length; right++) {
+    // 1. add nums[right] to the window state
+    // 2. while the window is INVALID, shrink from the left
+    while (!isValid()) {
+      // remove nums[left] from the window state
+      left++;
+    }
+    // 3. window is valid again — now it is safe to measure
+    best = Math.max(best, right - left + 1);
+  }
+  return best;
+}
+```
+
+The `while` is not a typo. One bad element can sit deep in the window, so you may need to shrink several times. A single `if` would leave invalid windows behind.
+
+> [!WARNING]
+> **Common mistake:** measuring the window *before* the shrink loop finishes. The moment `right` lands, your window can be invalid — shrink first, measure second. Recording an invalid window gives you answers that are too long (for "longest") or too short (for "shortest").
+
+### Adding a frequency map to the window
+
+When validity depends on *counts* — "at most k distinct characters", "no character appears more than twice", "all characters of `t` are covered" — keep a `Map` of what is inside.
+
+```js
+function longestAtMostKDistinct(s, k) {
+  const freq = new Map(); // char -> count inside window
+  let left = 0, best = 0;
+  for (let right = 0; right < s.length; right++) {
+    const c = s[right];
+    freq.set(c, (freq.get(c) || 0) + 1);
+    while (freq.size > k) {           // too many distinct chars
+      const out = s[left];
+      freq.set(out, freq.get(out) - 1);
+      if (freq.get(out) === 0) freq.delete(out);
+      left++;
+    }
+    best = Math.max(best, right - left + 1);
+  }
+  return best;
+}
+```
+
+Three rules keep this code correct:
+
+1. When a count drops to **0**, delete the key — otherwise `freq.size` lies about how many distinct characters you really have.
+2. Update the map for the *leaving* character **before** you move `left`.
+3. The condition is almost always on the map (`freq.size`, a matched counter), not on raw window length.
+
+**Complexity to say out loud:** O(n) time — each character enters the map and leaves it once. O(k) space, where k is the alphabet or the distinct limit.
+
+### Worked trace — Minimum Window Substring
+
+Problem: given `s = "ADOBECODEBANC"` and `t = "ABC"`, find the **smallest** substring of `s` that contains all of `ABC`. Answer: `"BANC"`.
+
+Track two things: a `need` map for `t` (`A:1, B:1, C:1`) and a `formed` counter = how many distinct required characters are fully satisfied in the window.
+
+| right char | Window (left..right) | formed / required | What happens |
+|---|---|---|---|
+| A | `A` | 1 / 3 | A satisfied |
+| D | `AD` | 1 / 3 | D not needed |
+| O | `ADO` | 1 / 3 | Not needed |
+| B | `ADOB` | 2 / 3 | B satisfied |
+| E | `ADOBE` | 2 / 3 | Not needed |
+| C | `ADOBEC` | 3 / 3 | All satisfied! Record length 6 |
+| O | shrink → `DOBEC`… `BEC` | drops below 3 | Keep shrinking while valid, record each step, stop when invalid |
+
+Once the window is valid, you flip into shrink mode: move `left` forward, record the window each time it stays valid, and stop the moment a required character drops out. Then expand `right` again. The smallest window you recorded is `"BANC"`.
+
+> [!TIP]
+> Minimum-window problems invert the instinct from longest-window problems: there you shrink because the window is *invalid*; here you shrink *while it stays valid* to make it as small as possible. Saying "shrink-while-valid for minimum, shrink-while-invalid for longest" out loud is a clean way to show you know the difference.
+
+**Practice:** Longest Substring With At Most K Distinct Characters, Fruit Into Baskets (this is the map template), Minimum Window Substring, Permutation in String (fixed window + frequency map).
+
+### When sliding window FAILS — and what to do instead
+
+Sliding window quietly assumes something big: **expanding the window only pushes your measure in one direction.** With all-positive numbers, growing the window only increases the sum and shrinking only decreases it — monotonic, safe, slide away.
+
+Negative numbers break that promise. In `[2, -1, 2]` with target sum 3, expanding might increase the sum, decrease it, then increase it again. There is no rule left for which pointer to move, so the technique collapses.
+
+The replacement is **prefix sums + a hash map**:
+
+```js
+// count subarrays that sum to k — works with negatives
+function subarraySum(nums, k) {
+  const seen = new Map([[0, 1]]); // prefixSum -> how many times seen
+  let sum = 0, count = 0;
+  for (const x of nums) {
+    sum += x;
+    // a subarray ending here sums to k if (sum - k) appeared before
+    count += seen.get(sum - k) || 0;
+    seen.set(sum, (seen.get(sum) || 0) + 1);
+  }
+  return count;
+}
+```
+
+The idea in one line: `sum(l..r) = prefix[r] - prefix[l-1]`, so a subarray sums to `k` exactly when you have seen the prefix value `sum - k` before. Still O(n) time, O(n) space — just no window.
+
+> [!WARNING]
+> **Common mistake:** reaching for sliding window any time you see the word "subarray". Check the numbers first: all positive (or all same sign) → window is safe; negatives allowed → think prefix sums. Naming this check in the first 30 seconds is exactly the kind of signal interviewers score.
+
+> [!TIP]
+> 🗣️ **30-second interview answer:** "Sliding window keeps a contiguous range that I expand on the right and shrink on the left while it breaks the rule. Each element enters and leaves once, so it is O(n). If the problem needs frequency counts, I keep a Map of the window. And if the array has negatives, sliding window loses its monotonicity, so I switch to prefix sums with a hash map."
+
+---
+
+## 16. Binary Search on the Answer Space — Search the Answer, Not the Array
+
+Section 7 ended with a hint: binary search works on any monotonic yes/no condition. This chapter is the full pattern, because "binary search on the answer" is one of the highest-yield interview topics there is — the array is nowhere in sight, yet halving still works.
+
+> [!NOTE]
+> 📌 **The shape of these problems:** "Find the *minimum* X such that it is *possible* to…" or "Find the *smallest* capacity / speed / largest minimum distance such that…" The word **minimum possible** next to a **feasibility condition** is the tell.
+
+### The monotonic feasibility idea
+
+Suppose you are choosing a number `x` (a ship capacity, a banana-eating speed, a day limit). Now imagine a yes/no question: *"If I pick x, can I finish the job?"* In these problems, the answers always look like this:
+
+```text
+x:    1   2   3   4   5   6   7   8   9  10
+works? ✗   ✗   ✗   ✗   ✓   ✓   ✓   ✓   ✓   ✓
+                    ^ first ✓ — this is your answer
+```
+
+Once `x` is big enough to work, **every larger x also works** (a bigger ship never makes shipping harder; eating bananas faster never makes you later). And below the threshold, nothing works. That single flip from ✗ to ✓ is monotonic — exactly the second condition from Section 7.
+
+So the job splits into two pieces:
+
+1. `can(x)` — a plain linear check: *"given x, does it work?"* (the **feasibility check**)
+2. Binary search for the **first** `x` where `can(x)` turns true.
+
+```js
+function binarySearchOnAnswer(lo, hi, can) {
+  // find the smallest x in [lo, hi] with can(x) === true
+  while (lo < hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (can(mid)) {
+      hi = mid;       // mid works — answer is mid or smaller
+    } else {
+      lo = mid + 1;   // mid fails — answer is strictly bigger
+    }
+  }
+  return lo; // lo === hi === first working value
+}
+```
+
+> [!TIP]
+> 🧠 The sentence that unlocks it in the interview: *"I am not searching the array — I am searching the answer. If I can test a guess in linear time, I can binary-search the guesses."*
+
+### Worked example — Capacity To Ship Packages Within D Days
+
+Packages have weights `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]` (total 55). They must ship **in order**, in at most `D = 5` days. Each day the ship takes a contiguous run of packages whose total is at most the capacity. Find the **minimum** capacity. Expected answer: `15`.
+
+**Step 1 — the search range.** The capacity is at least the heaviest single package (`lo = 10`) and at most the sum of everything (`hi = 55`). Your answer lives in `[10, 55]`.
+
+**Step 2 — the feasibility check.** Given a capacity, greedily fill each day: keep adding packages until the next one would overflow, then start a new day. Count the days.
+
+```js
+function daysNeeded(weights, capacity) {
+  let days = 1;
+  let load = 0;
+  for (const w of weights) {
+    if (load + w > capacity) {
+      days++;      // start a new day
+      load = w;
+    } else {
+      load += w;
+    }
+  }
+  return days;
+}
+
+function shipWithinDays(weights, D) {
+  let lo = Math.max(...weights);
+  let hi = weights.reduce((a, b) => a + b, 0);
+  const can = (cap) => daysNeeded(weights, cap) <= D;
+  while (lo < hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (can(mid)) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo;
+}
+```
+
+**Step 3 — trace the halving.** Watch `can(mid)` flip and the range shrink:
+
+| lo | hi | mid | daysNeeded(mid) | can(mid)? (≤ 5 days) | Move |
+|---|---|---|---|---|---|
+| 10 | 55 | 32 | 2 | ✓ | Too generous — try smaller, `hi = 32` |
+| 10 | 32 | 21 | 3 | ✓ | Still works, `hi = 21` |
+| 10 | 21 | 15 | 5 | ✓ | Exactly 5 days, `hi = 15` |
+| 10 | 15 | 12 | 6 | ✗ | Too small — answer is bigger, `lo = 13` |
+| 13 | 15 | 14 | 6 | ✗ | Still too small, `lo = 15` |
+| 15 | 15 | — | — | — | `lo === hi` → answer is **15** |
+
+Notice what never happened: we never sorted anything, and we only ran the O(n) day-counter about log(55−10) ≈ 6 times.
+
+**Complexity to say out loud:** O(n log S) time, where S is the sum of weights (the size of the search range), and O(1) extra space. The linear check runs once per halving.
+
+> [!WARNING]
+> **Common mistake:** picking the wrong bounds. `lo` must be a value that *might* be the answer and `hi` must be a value that *definitely works* (or the largest candidate). If `hi` does not actually work, the loop quietly returns a wrong answer instead of complaining. Thirty seconds spent justifying both bounds beats five minutes of debugging.
+
+### lower_bound and upper_bound — the same template on arrays
+
+Back in Section 7 you searched for a value. Two close cousins show up constantly:
+
+- **lower_bound(target):** first index where `arr[i] >= target` ("where would this value be inserted, keeping order?")
+- **upper_bound(target):** first index where `arr[i] > target` ("one past the last equal element")
+
+Together they answer "how many times does x occur?" → `upper_bound(x) − lower_bound(x)`, and "first/last occurrence" problems (a very common interview ask).
+
+```js
+function lowerBound(arr, target) {
+  let lo = 0, hi = arr.length; // note: hi can be arr.length
+  while (lo < hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (arr[mid] < target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function upperBound(arr, target) {
+  let lo = 0, hi = arr.length;
+  while (lo < hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (arr[mid] <= target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+```
+
+The only difference between them is `<` versus `<=` in one line — and that one character deciding "first ≥" versus "first >" is a classic interviewer follow-up. Both run in O(log n).
+
+**Practice:** Capacity To Ship Packages Within D Days, Koko Eating Bananas (same skeleton, `can(speed)` = total hours ≤ h), Split Array Largest Sum, Find First and Last Position of Element in Sorted Array (lower/upper bound).
+
+> [!TIP]
+> 🗣️ **30-second interview answer:** "If I can phrase the problem as 'smallest x that works', and once x works every larger x works too, I binary-search on x. I write a linear can(x) check, set lo to the smallest possible answer and hi to one that definitely works, then halve until lo and hi meet. That gives O(n log range) instead of trying every candidate."
+
+---
+
+## 17. Graph Deep Dive — From Adjacency List to Dijkstra
+
+Section 11 gave you BFS and DFS as ideas. This chapter gives you the code skeletons, plus the three graph algorithms interviewers actually escalate to: topological sort, cycle detection in directed graphs, and shortest paths with weights.
+
+> [!NOTE]
+> 📌 **Storage first, always:** build an **adjacency list** — `graph[u]` = the neighbours of `u`. Iterating neighbours stays cheap, memory is O(V + E), and every algorithm below reads from this one shape.
+
+```js
+// build an adjacency list from an edge list (directed)
+function buildGraph(n, edges) {
+  const graph = Array.from({ length: n }, () => []);
+  for (const [u, v] of edges) graph[u].push(v); // add graph[v].push(u) too if undirected
+  return graph;
+}
+```
+
+### BFS and DFS templates
+
+BFS explores level by level with a queue — say *"nearest first"* out loud. DFS dives down one path with recursion (the call stack *is* the stack from Section 9).
+
+```js
+function bfs(graph, start) {
+  const visited = new Set([start]);
+  const queue = [start]; // use an index pointer instead of shift() for O(1) pops
+  let head = 0;
+  const order = [];
+  while (head < queue.length) {
+    const u = queue[head++];
+    order.push(u);
+    for (const v of graph[u]) {
+      if (!visited.has(v)) {
+        visited.add(v); // mark when ADDED, not when removed
+        queue.push(v);
+      }
+    }
+  }
+  return order;
+}
+
+function dfs(graph, start) {
+  const visited = new Set();
+  const order = [];
+  function walk(u) {
+    visited.add(u);
+    order.push(u);
+    for (const v of graph[u]) {
+      if (!visited.has(v)) walk(v);
+    }
+  }
+  walk(start);
+  return order;
+}
+```
+
+> [!WARNING]
+> **Common mistake:** using `queue.shift()` in JavaScript "because it looks clean." `shift()` re-indexes the whole array — O(n) per pop, quietly turning your BFS quadratic. Use an array with a `head` index pointer and mention why: *"shift is O(n), so I move a read pointer instead."* That one line signals real debugging experience.
+
+**Complexity to say out loud:** both BFS and DFS visit every vertex and edge once → O(V + E) time, O(V) space for the visited set (plus the queue or call stack).
+
+### Topological sort — Kahn's algorithm
+
+Problem shape: tasks with prerequisites ("course B needs course A first") — *course schedule* is the classic. A topological order is any ordering where every edge points forward. **Kahn's algorithm** works like peeling an onion:
+
+1. Compute each node's **indegree** = how many edges point *into* it.
+2. Queue every node with indegree 0 (nothing blocks it — safe to take now).
+3. Take a node out, append it to the answer, and "remove" its outgoing edges (decrement neighbours' indegrees). Any neighbour that hits 0 joins the queue.
+
+```js
+function topoSort(n, edges) {
+  const graph = buildGraph(n, edges);
+  const indegree = Array(n).fill(0);
+  for (const [u, v] of edges) indegree[v]++;
+  const queue = [];
+  for (let i = 0; i < n; i++) if (indegree[i] === 0) queue.push(i);
+  const order = [];
+  let head = 0;
+  while (head < queue.length) {
+    const u = queue[head++];
+    order.push(u);
+    for (const v of graph[u]) {
+      if (--indegree[v] === 0) queue.push(v);
+    }
+  }
+  return order.length === n ? order : []; // shorter than n => there is a cycle
+}
+```
+
+**Indegree trace** on tasks `0→2, 1→2, 2→3` (read `a→b` as "a before b"):
+
+| Step | Indegrees [0, 1, 2, 3] | Queue | Take | Effect |
+|---|---|---|---|---|
+| Start | [0, 0, 2, 1] | [0, 1] | — | 0 and 1 are unblocked |
+| 1 | [0, 0, 1, 1] | [1] | 0 | 2 loses one blocker |
+| 2 | [0, 0, 0, 1] | [2] | 1 | 2 is now free, joins queue |
+| 3 | [0, 0, 0, 0] | [3] | 2 | 3 is now free |
+| 4 | [0, 0, 0, 0] | [] | 3 | Done — order `[0, 1, 2, 3]` |
+
+The bonus is free: if the final order is shorter than `n`, the leftover nodes are stuck behind a **cycle** — no valid order exists. Interviewers ask "how do you detect an impossible schedule?" and this is the answer.
+
+### Cycle detection in directed graphs — the three colors
+
+Undirected cycles are easy (did I come from this neighbour?). Directed graphs need more care, because reaching an already-visited node is fine if that branch is *finished*. So each node gets a color:
+
+- **White** — never visited
+- **Gray** — on the *current* recursion path (visited, not finished)
+- **Black** — completely finished
+
+**The rule:** if DFS ever reaches a **gray** node, you just walked back into your own path → cycle found.
+
+```js
+function hasCycle(n, edges) {
+  const graph = buildGraph(n, edges);
+  const color = Array(n).fill(0); // 0 = white, 1 = gray, 2 = black
+  function walk(u) {
+    color[u] = 1; // gray: on the current path
+    for (const v of graph[u]) {
+      if (color[v] === 1) return true;            // back edge => cycle
+      if (color[v] === 0 && walk(v)) return true; // search deeper
+    }
+    color[u] = 2; // black: this path is fully explored
+    return false;
+  }
+  for (let i = 0; i < n; i++) {
+    if (color[i] === 0 && walk(i)) return true;
+  }
+  return false;
+}
+```
+
+> [!TIP]
+> 🧠 The one-line intuition: *"gray means 'still on my current path' — pointing at gray means I looped back into myself; pointing at black is just a finished detour."* Saying "gray, not just visited" is what separates this from the undirected answer.
+
+### Dijkstra — shortest path with weights
+
+Now edges have costs (distances, prices, time), so BFS breaks: the *nearest by hops* is no longer the *cheapest overall*. Dijkstra's algorithm keeps, for every node, the **best known distance** from the start, and always finalizes the unvisited node with the smallest tentative distance next.
+
+**Why the greediness is safe (the part interviewers probe):** when you pick the unvisited node with the smallest distance, could a *longer-looking* detour through other unvisited nodes secretly beat it? No — every other unvisited node is already ≥ this distance, and edge weights are non-negative, so any detour only adds more. The smallest tentative distance is final. That "non-negative weights" condition is not a footnote; it is the entire proof, and Dijkstra genuinely fails with negative edges (that is Bellman-Ford territory — just name it).
+
+**Distance-table walk** on `A→B (4), A→C (2), C→B (1), B→D (3), C→D (5)`:
+
+| Finalized | dist A | dist B | dist C | dist D | Why |
+|---|---|---|---|---|---|
+| start | 0 | ∞ | ∞ | ∞ | Only A is known |
+| A | **0** | 4 | 2 | ∞ | From A: B costs 4, C costs 2 |
+| C | 0 | **3** | **2** | 7 | Via C: B improves to 2+1=3, D = 2+5=7 |
+| B | 0 | 3 | 2 | **6** | Via B: D improves to 3+3=6 |
+| D | 0 | 3 | 2 | 6 | Nothing left to improve — done |
+
+Watch B get *corrected* from 4 to 3 before it is finalized — that correction (called **relaxation**) is the heartbeat of the algorithm: `if dist[u] + w < dist[v], update dist[v]`.
+
+```js
+// Dijkstra skeleton — dist array + a min-priority queue of [dist, node]
+// (JavaScript has no built-in heap; see Section 19 for the heap itself.)
+function dijkstra(n, edges, start) {
+  const graph = Array.from({ length: n }, () => []);
+  for (const [u, v, w] of edges) graph[u].push([v, w]);
+  const dist = Array(n).fill(Infinity);
+  dist[start] = 0;
+  const pq = [[0, start]]; // pretend this is a real min-heap
+  while (pq.length) {
+    const [d, u] = popMin(pq);       // smallest distance first
+    if (d > dist[u]) continue;       // stale entry — a better one already won
+    for (const [v, w] of graph[u]) {
+      if (d + w < dist[v]) {
+        dist[v] = d + w;             // relax the edge
+        pq.push([dist[v], v]);
+      }
+    }
+  }
+  return dist;
+}
+```
+
+**Complexity to say out loud:** O((V + E) log V) with a proper heap (the log comes from heap pops). And the line that ends most follow-ups: *"If all weights are 1, plain BFS already gives shortest paths in O(V + E) — Dijkstra is BFS with a priority queue instead of a regular queue."*
+
+**Practice:** Course Schedule (Kahn's or colors), Number of Islands (BFS/DFS grid), Network Delay Time (Dijkstra), Find if Path Exists in Graph (either traversal + visited).
+
+> [!TIP]
+> 🗣️ **30-second interview answer:** "I store graphs as adjacency lists. BFS with a queue gives shortest paths in unweighted graphs; DFS goes deep with recursion. For prerequisite ordering I use Kahn's — repeatedly take nodes with indegree zero; a short answer means a cycle. For weighted shortest paths I use Dijkstra: always finalize the smallest tentative distance, which is safe because weights are non-negative."
+
+---
+
+## 18. DP Patterns — Name the State, Then Fill the Table
+
+Section 13 taught you to spot DP. The graveyard mistake in interviews is diving into a table before you can say what a cell *means*. So this chapter starts every pattern the same way: **define the state in one English sentence first**, then let the table fill itself.
+
+> [!NOTE]
+> 📌 **The state-first ritual:** before any code, say *"dp[i] means …"* out loud and write it as a comment. If you cannot finish that sentence, you are not ready to write the loop. Every pattern below starts there.
+
+### 0/1 Knapsack — each item once: take it or leave it
+
+You have a bag with capacity `W` and items with weights and values. Each item can be taken **at most once** (that is the "0/1" — 0 copies or 1). Maximize the value.
+
+**State:** `dp[w]` = the **maximum value achievable using some of the items considered so far, with total weight at most w**.
+
+```js
+function knapsack(weights, values, W) {
+  const dp = Array(W + 1).fill(0);
+  for (let i = 0; i < weights.length; i++) {
+    // walk capacity BACKWARD — see the warning below
+    for (let w = W; w >= weights[i]; w--) {
+      dp[w] = Math.max(
+        dp[w],                              // skip item i
+        dp[w - weights[i]] + values[i]      // take item i
+      );
+    }
+  }
+  return dp[W];
+}
+```
+
+**1D table walk** — items: A (w=2, v=3), B (w=3, v=4), C (w=4, v=5), capacity 5. Each row shows `dp` after that item, capacities 0→5:
+
+| After item | dp[0] | dp[1] | dp[2] | dp[3] | dp[4] | dp[5] | Reading it |
+|---|---|---|---|---|---|---|---|
+| none | 0 | 0 | 0 | 0 | 0 | 0 | Empty bag |
+| A (2,3) | 0 | 0 | 3 | 3 | 3 | 3 | Only A fits |
+| B (3,4) | 0 | 0 | 3 | 4 | 4 | 7 | dp[5]=7 is A+B |
+| C (4,5) | 0 | 0 | 3 | 4 | 5 | 7 | C alone (5) does not beat A+B (7) |
+
+Answer: `dp[5] = 7` (items A + B).
+
+> [!WARNING]
+> **Common mistake:** looping capacity **forward** in the 1D version. Forward, `dp[w - weight]` may already include the current item from this same round — you would take one item twice, silently solving the *unbounded* knapsack instead. Backward guarantees every `dp[w - weight]` still means "without this item." Interviewers probe exactly this line.
+
+**Complexity:** O(n × W) time, O(W) space in the 1D form.
+
+### Longest Increasing Subsequence — from O(n²) to O(n log n)
+
+**State (the honest O(n²) version):** `dp[i]` = length of the longest increasing subsequence **ending exactly at i**. For each i, look back at every j < i with `nums[j] < nums[i]` and extend. Fine to derive first — then optimize.
+
+**The O(n log n) "tails" idea:** keep an array `tails`, where `tails[len]` = the **smallest possible last value** of an increasing subsequence of length `len + 1`. Small tails are good news — they leave the most room to extend. For each new number `x`, binary-search for the first tail ≥ x and replace it (or append if x beats them all).
+
+Walk on `[10, 9, 2, 5, 3, 7]`:
+
+| x | tails after | What happened |
+|---|---|---|
+| 10 | [10] | First subsequence of length 1 |
+| 9 | [9] | 9 < 10 — a smaller tail for length 1 |
+| 2 | [2] | Smaller still |
+| 5 | [2, 5] | 5 extends length 1 → new length 2 |
+| 3 | [2, 3] | 3 replaces 5 — better tail for length 2 |
+| 7 | [2, 3, 7] | 7 extends → length 3 |
+
+The answer is `tails.length` = **3** (e.g., 2, 3, 7 or 2, 5, 7).
+
+```js
+function lengthOfLIS(nums) {
+  const tails = [];
+  for (const x of nums) {
+    let lo = 0, hi = tails.length; // lower_bound from Section 16
+    while (lo < hi) {
+      const mid = lo + Math.floor((hi - lo) / 2);
+      if (tails[mid] < x) lo = mid + 1; else hi = mid;
+    }
+    tails[lo] = x; // replace, or append when lo === tails.length
+  }
+  return tails.length;
+}
+```
+
+> [!WARNING]
+> **Common mistake:** claiming `tails` *is* the subsequence. It is not — `[2, 3, 7]` here happens to be valid, but `tails` is only a bookkeeping device of best-possible endings; its length is always right, its contents are not guaranteed to be an actual subsequence. Say "the length is correct, the array itself is not the answer sequence" and you dodge the follow-up trap.
+
+### Grid DP — answers from the neighbours
+
+Grids are DP wearing coordinates. **State:** `dp[r][c]` = the answer **for the sub-grid problem ending at cell (r, c)**.
+
+**Unique Paths** (only moves: right or down) — count routes to each cell. A cell is reachable from the top and the left only, so `dp[r][c] = dp[r-1][c] + dp[r][c-1]`:
+
+| | c0 | c1 | c2 |
+|---|---|---|---|
+| r0 | 1 | 1 | 1 |
+| r1 | 1 | 2 | 3 |
+| r2 | 1 | 3 | 6 |
+
+The bottom-right cell says **6** paths. First row/column are all 1s (only one straight-line way in) — that is your base case.
+
+**Minimum Path Sum** — same walk, different combination rule: `dp[r][c] = grid[r][c] + min(dp[r-1][c], dp[r][c-1])`. On grid `[[1,3,1],[1,5,1],[4,2,1]]`:
+
+| | c0 | c1 | c2 |
+|---|---|---|---|
+| r0 | 1 | 4 (=1+3) | 5 (=4+1) |
+| r1 | 2 (=1+1) | 7 (=2+min(4,5)→ 1+5) | 6 (=5+1) |
+| r2 | 6 (=2+4) | 8 (=6+2) | 7 (=6+1) |
+
+Answer: **7** (the path 1→3→1→1→1 running along the top and right edges).
+
+> [!TIP]
+> 🧠 Both grid problems are one template: *fill in reading order, combine the cells you could have come from*. Change the combination rule (sum, min, max) and you change the problem — the skeleton never changes. Bonus space trick worth naming: each row only needs the previous row, so a 1D array of width = columns works, O(cols) space.
+
+### The take/skip template — House Robber, generalized
+
+House Robber from Section 13 — *rob this house (+ answer from two back) or skip it (answer from one back)* — is actually the master template for a whole family:
+
+```js
+// decide(i) = best answer considering items from position i onward
+// decide(i) = max( skip: decide(i + 1),  take: value[i] + decide(i + step) )
+```
+
+Recognize the family by its silhouette: **items in a row, a decision per item, and a constraint between neighbours** (no two adjacent, at most one transaction, cooldown after a sale). Coin Change is the same spirit with more choices ("try every coin as the last one"). When you see "at each step, take it or skip it," write the two branches first — the DP table is just those branches with a notebook.
+
+**Practice:** 0/1 Knapsack (any platform), Climbing Stairs / House Robber (take-skip), Longest Increasing Subsequence, Unique Paths and Minimum Path Sum (grids), Coin Change (choice loop inside the state).
+
+> [!TIP]
+> 🗣️ **30-second interview answer:** "I start by defining the state in words — dp[i] means the best answer for the first i items. Then I write the choice: skip item i, or take it and add the answer from before it. Knapsack walks capacity backward so no item is reused, LIS can be done in O(n log n) with a tails array and binary search, and grid DP just combines the cells above and left. Everything is that state plus a transition."
+
+---
+
+## 19. Heap Patterns — Keep Only the K Best, Throw the Rest Away
+
+The pattern table in Section 14 says: *"Top K / K largest / K smallest → Heap."* This chapter shows why, and how. One honest JavaScript wrinkle first: **JS has no built-in heap or PriorityQueue** (as of these notes). Other languages get one free; in JS you either hand-roll a small binary heap or describe the approach and note the missing library. Below is a compact heap you can write from memory.
+
+> [!NOTE]
+> 📌 **The core idea in one line:** a heap is a binary tree stored in an array where every parent beats its children — so the *best* (smallest or largest) element is always sitting at index 0, readable in O(1).
+
+### A small binary heap you can actually write
+
+Stored flat: for the node at index `i`, its children are `2i + 1` and `2i + 2`, and its parent is `Math.floor((i - 1) / 2)`. Two repairs keep the promise after every change: **bubble up** after pushing, **sink down** after popping the root.
+
+```js
+class MinHeap {
+  constructor() { this.a = []; }
+  size() { return this.a.length; }
+  peek() { return this.a[0]; }
+  push(x) {
+    const a = this.a;
+    a.push(x);
+    let i = a.length - 1;
+    while (i > 0) { // bubble up while smaller than parent
+      const p = Math.floor((i - 1) / 2);
+      if (a[p] <= a[i]) break;
+      [a[p], a[i]] = [a[i], a[p]];
+      i = p;
+    }
+  }
+  pop() {
+    const a = this.a;
+    const top = a[0];
+    const last = a.pop();
+    if (a.length) {
+      a[0] = last;
+      let i = 0;
+      while (true) { // sink down toward the smaller child
+        const l = 2 * i + 1, r = l + 1;
+        let s = i;
+        if (l < a.length && a[l] < a[s]) s = l;
+        if (r < a.length && a[r] < a[s]) s = r;
+        if (s === i) break;
+        [a[s], a[i]] = [a[i], a[s]];
+        i = s;
+      }
+    }
+    return top;
+  }
+}
+```
+
+Push and pop are O(log n) (the element travels the tree's height); peek is O(1). For a **max-heap**, flip every comparison — or push negated values into a min-heap and negate on the way out (the trick JS folks use constantly).
+
+> [!TIP]
+> 🧠 Interview line that covers the JS gap gracefully: *"JavaScript doesn't ship a priority queue, so I'd implement this small binary heap — in Java I'd use PriorityQueue and in Python heapq. The pattern and complexity are identical."* Interviewers accept this every time; fumbling silently does not.
+
+### The Top-K template
+
+Problem shape: *"Kth largest element"* or *"K most frequent"* in a stream too big to sort.
+
+The move: keep a **min-heap of size at most k** holding the current K winners. Its root is the *worst of the winners* — the easiest one to evict. If a new element beats the root, pop the root and push the newcomer.
+
+```js
+function kthLargest(nums, k) {
+  const heap = new MinHeap();
+  for (const x of nums) {
+    heap.push(x);
+    if (heap.size() > k) heap.pop(); // evict the smallest of the candidates
+  }
+  return heap.peek(); // root = Kth largest overall
+}
+```
+
+**Trace** on `[3, 2, 1, 5, 6, 4]` with k = 2 (find the 2nd largest):
+
+| x | Heap after (array view) | Root | What happened |
+|---|---|---|---|
+| 3 | [3] | 3 | First candidate |
+| 2 | [2, 3] | 2 | Pool of 2 complete |
+| 1 | [2, 3] | 2 | Push 1 → size 3 → pop the 1 back out |
+| 5 | [3, 5] | 3 | 5 enters, old root 2 evicted |
+| 6 | [5, 6] | 5 | 6 enters, 3 evicted |
+| 4 | [5, 6] | 5 | 4 pushed then immediately evicted |
+
+Answer: root **5** — the 2nd largest (6 is 1st). The heap never held more than 2 elements, even though the input could have had a billion.
+
+**Complexity to say out loud:** O(n log k) time — every push/pop touches a heap of size ≤ k — and O(k) space. Contrast it with sorting: O(n log n). When k is small, this is a clear win; that contrast is usually the whole interview question.
+
+> [!WARNING]
+> **Common mistake:** using a **max**-heap for top-K and ending up with the whole array inside. The heap must hold the *candidates you might discard*, so its root should be the weakest candidate — a min-heap for "K largest" (and a max-heap for "K smallest"). If your heap grows to n, you have just invented a slower sort.
+
+### Two heaps — the median of a stream
+
+Numbers keep arriving and you must report the median at any moment. Keep two heaps:
+
+- **Low half** in a **max-heap** (its root = largest of the small numbers)
+- **High half** in a **min-heap** (its root = smallest of the big numbers)
+
+Keep the sizes balanced (differ by at most 1, every low ≤ every high). The median is then a root — or the average of both roots. Each insert is O(log n), each median query is O(1). The sentence to memorize: *"the median always lives at the border between the two heaps."*
+
+### Merge K sorted lists — the heap as a frontier
+
+You have k already-sorted lists and need one merged list. At any moment, the next output element is the **smallest current head** among the lists. Put one head per list into a min-heap; repeatedly pop the minimum, output it, and push that same list's next element.
+
+**Complexity:** each of the n total elements does one push and one pop on a heap of size ≤ k → **O(n log k)**. Without the heap you'd scan all k heads for every output — O(n × k). The heap is the whole optimization, and "the heap holds the frontier — one candidate per list" is the intuition to say out loud.
+
+**Practice:** Kth Largest Element in an Array, Top K Frequent Elements (frequency map + heap of size k), Find Median from Data Stream (two heaps), Merge K Sorted Lists.
+
+> [!TIP]
+> 🗣️ **30-second interview answer:** "A heap keeps the best element at the root with O(log n) push and pop. For K largest, I keep a min-heap of the top K candidates — the root is the weakest winner, so anything smaller gets evicted immediately. That's O(n log k) time and O(k) space instead of sorting everything. Two balanced heaps give a running median, and a heap of list-heads merges K sorted lists in O(n log k)."
+
+---
+
+## 20. Complexity Deep Dive — Amortized Analysis and Defending Your Answer
+
+Every chapter so far ends in a claim like "this is O(n)". Interviewers follow up with *"but why?"* — and this chapter gives you the two arguments that answer most of those follow-ups, plus how to defend any complexity claim without hand-waving.
+
+> [!NOTE]
+> 📌 **Worst case vs amortized, in plain words:** worst case is the price of the single most expensive operation. **Amortized** is the *average price over a long run of operations* — expensive once in a while is fine, as long as the cheap operations pay for it.
+
+### Example 1 — why array push is O(1) amortized
+
+A dynamic array (JS `Array`, Java `ArrayList`, Python `list`) stores elements in a fixed block. When the block fills up, it allocates a **double-size** block and copies everything over. That copy is O(n) — so how can push claim O(1)?
+
+Watch the copying cost with capacity doubling, counting only copies (each push also writes 1 element, always O(1)):
+
+| Pushes so far (capacity) | Copy cost at this resize | Total copies so far | Copies per push |
+|---|---|---|---|
+| 1 → 2 | 1 | 1 | 1.00 |
+| 2 → 4 | 2 | 3 | 0.75 |
+| 4 → 8 | 4 | 7 | 0.88 |
+| 8 → 16 | 8 | 15 | 0.94 |
+| 16 → 32 | 16 | 31 | 0.97 |
+| 32 → 64 | 32 | 63 | 0.98 |
+
+The pattern: each resize is expensive, but resizes get *rarer* — you must push capacity-many times before the next one. Total copies after n pushes are under 2n, so the average cost per push stays below a constant. That is the whole argument:
+
+> 🔍 *"The expensive operation is real, but it is paid for by all the cheap pushes since the last one. Averaged over the whole sequence, push is O(1) amortized."*
+
+This is why "Insert at end: O(1) amortized" appears in the Section 1 table — and why honest answers say **amortized**, not just O(1). (Same idea powers the two-stack queue from Section 9: pouring is occasionally O(n), but each element is poured at most once.)
+
+### Example 2 — "each element enters once" (the sliding window argument)
+
+Students often look at the variable-window code, see a `while` inside a `for`, and call it O(n²). It is O(n) — here is the airtight reason, the **monotone pointer argument**:
+
+- `right` moves from 0 to n − 1: exactly n steps, never backwards.
+- `left` also only moves forward: at most n steps across the *entire run*, not per iteration.
+- The inner `while` cannot push either pointer past n, so the total pointer moves are ≤ 2n.
+
+Same skeleton, same conclusion everywhere:
+
+| Pattern | Why it is linear, not quadratic |
+|---|---|
+| Variable sliding window | Each index enters and leaves the window once; both pointers only advance |
+| Two pointers on sorted array | left and right together cross the array once — at most n moves in total |
+| BFS / DFS | Each vertex is queued/visited once, each edge relaxed from each endpoint once → O(V + E) |
+| Two-stack queue | Each element is pushed twice and popped twice in its whole lifetime |
+
+> [!TIP]
+> 🧠 The speakable version: *"Nested loops don't automatically mean quadratic — ask whether the inner pointer ever resets. If both pointers only move forward, the total work is linear."* Counting pointer movement instead of loop nesting is the skill; say it exactly like that.
+
+### Space complexity of recursion — the call stack is not free
+
+Time gets all the attention, but interviewers ask *"and the space?"* — and recursion's hidden cost is the **call stack**. Every active call holds a frame (parameters, local variables, return address). If the deepest chain of calls is `d` frames, the stack costs O(d) space, even if your code allocates nothing else.
+
+| Recursion shape | Depth d | Stack space |
+|---|---|---|
+| fib / subsets branching over n items | O(n) deep (the longest single path) | O(n) |
+| Balanced binary-tree recursion | O(log n) if the tree is balanced | O(log n) |
+| Degenerate ("stick") tree recursion | O(n) — balance is gone | O(n) |
+| DFS on a path-like graph | O(V) in the worst case | O(V) |
+
+```js
+// depth counter: the deepest level of recursion IS the stack space
+function depth(node) {
+  if (!node) return 0;
+  return 1 + Math.max(depth(node.left), depth(node.right));
+}
+// this allocates no arrays — but on a skewed tree of n nodes,
+// n frames are alive at once at the bottom: O(n) space
+```
+
+> [!WARNING]
+> **Common mistake:** answering "O(1) space" for a recursive solution because you never wrote `new Array`. The stack disagrees. Always announce it: *"plus O(depth) for the call stack — O(log n) balanced, O(n) worst case."* And when you convert recursion to an explicit stack or loop, the space doesn't vanish — it moves. Naming where it went is the mature answer.
+
+### How to defend a complexity claim in the interview
+
+When challenged — *"are you sure that's O(n log n)?"* — do not repeat the claim louder. **Break the work into pieces and price each piece**, out loud:
+
+1. **Identify the dominant term.** "The sort is O(n log n), the scan after it is O(n) — the sort dominates, so total O(n log n)."
+2. **Count what the loops actually touch.** Name the quantity: elements, edges, or bits — not just "n". For graphs this is V and E, always both.
+3. **Separate one-time costs from per-step costs.** Building the frequency map is O(n) once; lookups inside the loop are O(1) each.
+4. **State your average/worst case and why.** "Hash map lookup is O(1) average; the worst case with collisions is O(n), but we quote the average for interviews."
+5. **Check the hidden costs of library calls**, like Section 1 warned: a sort or `shift()` hiding inside a loop multiplies, not adds.
+
+A calm template that works for nearly any solution:
+
+> *"Overall O(n log k): every one of the n elements does one push and at most one pop on a heap capped at size k, and heap operations cost O(log k). Space is O(k) for the heap itself, plus O(depth) if I count the recursion stack. The worst case doesn't change because the heap size is bounded by k, not n."*
+
+Numbers, a decomposition, a space line, and a worst-case note — that is a complete defense.
+
+**Practice:** revisit any three problems you have solved and re-derive their complexity with the five steps above, out loud, without looking at your notes. Then do it once more for space only.
+
+> [!TIP]
+> 🗣️ **30-second interview answer:** "I justify complexity by counting actual work: how many times each element or pointer moves, not how many loops are nested. Push on a dynamic array is O(1) amortized because doubling copies are paid for by the cheap pushes between resizes, and sliding window is O(n) because both pointers only move forward. For space, I always add the recursion stack — O(depth)."

@@ -12,8 +12,8 @@ function Ring({ pct, size = 52, stroke = 5 }) {
   const c = 2 * Math.PI * r;
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90 shrink-0">
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#ECE8F9" strokeWidth={stroke} />
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#7C6BD9" strokeWidth={stroke} strokeLinecap="round"
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#E2E8F0" strokeWidth={stroke} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#4F46E5" strokeWidth={stroke} strokeLinecap="round"
         strokeDasharray={`${(pct / 100) * c} ${c}`} />
       <text x="50%" y="50%" dy="0.35em" textAnchor="middle" className="fill-brand-800 font-extrabold"
         fontSize={size / 3.6} transform={`rotate(90 ${size / 2} ${size / 2})`}>{pct}%</text>
@@ -56,8 +56,8 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
   return (
     <div>
       {/* Hero — soft lavender */}
-      <section className="bg-gradient-to-b from-brand-50 via-[#FCFAFF] to-white border-b border-brand-100">
-        <div className="max-w-7xl mx-auto px-4 py-14 md:py-20">
+      <section className="bg-gradient-to-b from-brand-50 via-white to-white border-b border-brand-100">
+        <div className="page-container py-14 md:py-20">
           <p className="text-brand-600 font-bold tracking-wide text-sm">FULL-STACK INTERVIEW PREPARATION</p>
           <h1 className="text-4xl md:text-6xl font-extrabold leading-tight mt-3 text-brand-900">
             InterviewPrep <span className="text-brand-500 text-2xl md:text-4xl align-middle font-bold">by Ayushi Singh</span>
@@ -71,7 +71,7 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
             <button onClick={() => onNotes('javascript')} className="btn-primary px-6 py-3 text-base">
               📚 Start reading
             </button>
-            <button onClick={() => onMock()} className="bg-amber-400 text-amber-950 font-bold px-6 py-3 rounded-xl shadow-card hover:bg-amber-300 transition">
+            <button onClick={() => onMock()} className="btn-accent px-6 py-3 text-base">
               🎤 Enter the mock room
             </button>
             <button onClick={goProblems} className="btn-outline px-6 py-3 text-base">
@@ -96,7 +96,7 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
       </section>
 
       {/* Continue learning dashboard */}
-      <section className="max-w-7xl mx-auto px-4 -mt-8 relative z-10">
+      <section className="page-container -mt-8 relative z-10">
         <div className="bg-white rounded-3xl border border-brand-100 shadow-card p-6 md:p-7">
           <div className="flex flex-wrap items-center gap-3">
             <h2 className="text-xl font-extrabold text-brand-900">
@@ -142,7 +142,7 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
 
       {/* Topics strip — quick-jump pills */}
       <section className="bg-white border-b border-brand-100 mt-8">
-        <div className="max-w-7xl mx-auto px-4 py-5">
+        <div className="page-container py-5">
           <div className="flex items-center gap-3 overflow-x-auto nice-scroll pb-1">
             <span className="text-sm font-extrabold text-brand-900 whitespace-nowrap">Tutorials:</span>
             {TOPICS.map((t) => (
@@ -161,11 +161,11 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
       </section>
 
       {/* Study plan cards */}
-      <section className="max-w-7xl mx-auto px-4 py-12">
+      <section className="page-container py-12">
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <h2 className="text-2xl md:text-3xl font-extrabold text-brand-900">Study plans 📋</h2>
-            <p className="text-slate-600 mt-1">LeetCode-style plans — chapters of real work on this site, ticking themselves off as you go.</p>
+            <h2 className="section-title">Study plans 📋</h2>
+            <p className="section-sub">LeetCode-style plans — chapters of real work on this site, ticking themselves off as you go.</p>
           </div>
           <button onClick={onPlans} className="btn-outline ml-auto text-sm">All study plans →</button>
         </div>
@@ -192,9 +192,9 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
       </section>
 
       {/* Topic cards — grouped by TOPICS group */}
-      <section className="max-w-7xl mx-auto px-4 pb-12">
-        <h2 className="text-2xl md:text-3xl font-extrabold text-brand-900">Pick a topic, read it like notes 📖</h2>
-        <p className="text-slate-600 mt-1">Every guide ends with mock questions and a 60-second revision checklist.</p>
+      <section className="page-container pb-12">
+        <h2 className="section-title">Pick a topic, read it like notes 📖</h2>
+        <p className="section-sub">Every guide ends with mock questions and a 60-second revision checklist.</p>
         {groups.map((g) => (
           <div key={g} className="mt-8">
             <h3 className="text-sm font-extrabold uppercase tracking-[0.14em] text-brand-500">{g}</h3>
@@ -209,7 +209,7 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
                       <span className="text-3xl">{t.emoji}</span>
                       {doneGuide
                         ? <span className="text-[0.65rem] font-extrabold bg-brand-600 text-white px-2 py-0.5 rounded-full">✓ DONE</span>
-                        : t.isNew && <span className="text-[0.65rem] font-extrabold bg-amber-400 text-amber-950 px-2 py-0.5 rounded-full">NEW</span>}
+                        : t.isNew && <span className="text-[0.65rem] font-extrabold bg-[#0D9488] text-white px-2 py-0.5 rounded-full">NEW</span>}
                     </div>
                     <h3 className="font-bold text-lg text-slate-900 mt-3 leading-snug">{t.title}</h3>
                     <p className="text-sm text-slate-600 mt-1.5 leading-relaxed">{t.blurb}</p>
@@ -226,7 +226,7 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
 
       {/* Features strip */}
       <section className="bg-white border-y border-brand-100">
-        <div className="max-w-7xl mx-auto px-4 py-12">
+        <div className="page-container py-12">
           <h2 className="text-2xl font-extrabold text-brand-900">Everything you need, one site ✨</h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-6">
             {[
@@ -261,7 +261,7 @@ export default function Home({ onNotes, onMock, onPlayground, onSheet, onPlans, 
       </section>
 
       {/* Author section */}
-      <footer className="max-w-7xl mx-auto px-4 py-12">
+      <footer className="page-container py-12">
         <div className="bg-brand-900 text-white rounded-3xl p-7 md:p-10 flex flex-col md:flex-row gap-6 md:items-center shadow-card">
           <div className="w-16 h-16 rounded-2xl bg-white grid place-items-center shrink-0 shadow-card">
             <Logo size={52} />

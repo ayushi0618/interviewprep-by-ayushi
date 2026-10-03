@@ -7,7 +7,7 @@ export default function Footer({ onNotes, onSheet, onPlans, onMock, onPlayground
   const link = 'block text-sm text-brand-100/80 hover:text-white transition py-0.5 text-left';
   return (
     <footer className="bg-brand-900 text-white mt-auto">
-      <div className="max-w-7xl mx-auto px-4 py-10 grid gap-8 md:grid-cols-2 lg:grid-cols-4">
+      <div className="page-container py-10 grid gap-8 md:grid-cols-2 lg:grid-cols-4">
         <div>
           <div className="flex items-center gap-2.5">
             <span className="w-10 h-10 rounded-xl bg-white grid place-items-center shadow-card"><Logo size={30} /></span>
@@ -58,7 +58,7 @@ export default function Footer({ onNotes, onSheet, onPlans, onMock, onPlayground
         </div>
       </div>
       <div className="border-t border-white/10">
-        <p className="max-w-7xl mx-auto px-4 py-4 text-center text-xs text-brand-200/70">
+        <p className="page-container py-4 text-center text-xs text-brand-200/70">
           InterviewPrep by Ayushi Singh · Free for every student · Good luck — go get the offer 🚀
         </p>
       </div>

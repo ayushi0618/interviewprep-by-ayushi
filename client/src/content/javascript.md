@@ -1410,3 +1410,399 @@ Run through this the morning of an interview. If you can say each line out loud,
 ---
 
 > ✍️ *Notes compiled by **Ayushi Singh** — from my own full-stack interview preparation. If these helped you, ⭐ the repo and share it with a friend who's preparing too. Next up: React, Node.js, and DSA notes in this same repo.*
+
+
+---
+
+## 📌 14. Event Loop Deep Dive — Output Puzzles & Async Ordering
+
+Section 11 taught the model: sync first, drain all microtasks, then one macrotask. This chapter is the exam version — harder puzzles, and the two ideas that decide them: **`await` splits a function in two**, and **microtasks can starve macrotasks**.
+
+### `await` — where microtasks come from
+
+```js
+async function demo() {
+  console.log("1");
+  await null;
+  console.log("2");
+}
+demo();
+console.log("3");
+```
+
+Output: `1`, `3`, `2`. Why: `demo()` starts running *synchronously* — `1` prints immediately. `await` then **pauses `demo` and returns control to the caller**, scheduling "the rest of `demo`" as a microtask. `3` (ordinary sync code) runs, then the microtask queue drains and `2` prints. An `await` is a door the function walks out of; everything after it is a microtask.
+
+### The double-await puzzle
+
+```js
+async function a() {
+  console.log("a1");
+  await b();
+  console.log("a2");
+}
+async function b() {
+  console.log("b1");
+  await null;
+  console.log("b2");
+}
+a();
+console.log("sync");
+```
+
+Run it in your head, queue by queue:
+
+1. `a()` runs synchronously: prints `a1`, calls `b()`.
+2. `b()` runs synchronously: prints `b1`, hits `await null` → the rest of `b` (`b2`) is queued as a microtask, and `b` returns a pending promise. Back in `a`, `await b()` queues "the rest of `a`" (`a2`) as a microtask — *after* `b2`, because `a` can't continue until `b` settles.
+3. Sync code finishes: prints `sync`.
+4. Microtasks drain in order: `b2`, then `a2`.
+
+Output: `a1, b1, sync, b2, a2`. The method that never fails: (1) mark everything that runs synchronously right now, (2) then drain the microtask queue in the order things were added, (3) then — only then — one macrotask.
+
+### Microtask starvation — when the timer never runs
+
+This code never lets `setTimeout` fire, and explaining why wins interview points:
+
+```js
+function spin() {
+  Promise.resolve().then(spin); // schedules ANOTHER microtask, forever
+}
+spin();
+setTimeout(() => console.log("timer"), 0);
+```
+
+Each microtask adds one more microtask. The loop's rule — *"drain ALL microtasks before the next macrotask"* — means the queue never empties, so the timer callback waits forever (and the tab's rendering freezes too). The fix in real code: break long chains up, or move recurring background work to a macrotask (`setTimeout`/`setInterval`) so other work gets a turn.
+
+### `queueMicrotask` vs `setTimeout(0)` — placing work precisely
+
+- `queueMicrotask(fn)` / `Promise.resolve().then(fn)` → runs at the next microtask drain, still before any timer or rendering.
+- `setTimeout(fn, 0)` → runs as a macrotask, after all pending microtasks.
+
+One more interviewer favourite: **in Node**, `process.nextTick` callbacks run even before promise microtasks — worth naming if the role is backend-heavy, dangerous to state as gospel for browsers.
+
+```playground Predict the order: double await
+async function a() {
+  console.log("a1");
+  await b();
+  console.log("a2");
+}
+async function b() {
+  console.log("b1");
+  await null;
+  console.log("b2");
+}
+a();
+console.log("sync");
+// Predict the full order, then run. (Try removing one await at a time after.)
+```
+
+> [!WARNING]
+> **The trap in every one of these puzzles:** assuming "async = later = timer order." Timers are just one queue. If a promise and a timer both wait, the promise's entire family — including promises born inside promises — goes first.
+
+> [!TIP]
+> **30-second interview answer:** "JavaScript runs synchronous code to completion, then drains the entire microtask queue — promise callbacks and everything after an await — and only then takes one macrotask like a timer. That's why nested awaits print in a strict order, and why an endless chain of microtasks can starve a setTimeout forever."
+
+
+
+---
+
+## 📌 15. Closures in Real Code — Stale Closures, Modules & Memoization
+
+Section 4 gave the definition. Recruiters now test whether you've *been bitten* by closures in real code. Three real-world shapes cover nearly every follow-up.
+
+### The stale closure — React's favourite bug
+
+A closure captures the variables of the render where it was created. In React, each render is a fresh function run with fresh variables — so an old callback can hold yesterday's values:
+
+```jsx
+function SearchBox() {
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    const id = setTimeout(() => {
+      console.log("searching for:", query); // whichever query existed when THIS effect ran
+    }, 500);
+    return () => clearTimeout(id);
+  }, [query]);
+}
+```
+
+Type "react": every keystroke re-runs the effect, the old timer is cleaned up, and only the newest timer (holding "react") survives to log. Remove the dependency or the cleanup and old timers fire with **stale** `query` values — "rea", "reac" searches firing out of nowhere. That's the stale closure: correct JavaScript, wrong *generation* of variables. Name it in an interview along with the fix (functional updates, correct deps, cleanup) and you've answered the hardest hooks question freshers get.
+
+### The module pattern — privacy before classes were cool
+
+Closures were JavaScript's original private-variable system. Variables inside a function scope are unreachable from outside — only the returned functions can touch them:
+
+```js
+function createWallet(balance) {
+  // `balance` is private — no outside code can read or fake it
+  return {
+    spend(amount) { if (amount <= balance) balance -= amount; return balance; },
+    deposit(amount) { balance += amount; return balance; },
+    check() { return balance; },
+  };
+}
+
+const w = createWallet(500);
+w.spend(120);   // 380
+w.balance;      // undefined — there is no way in except through the methods
+```
+
+ES modules give you this per file (anything not `export`ed is private), but the pattern still matters: it's how library code hides state, and it's the honest answer to "how do you make a private variable in JavaScript?" (Add: modern classes also have `#private` fields.)
+
+### Memoization — a closure as a cache
+
+A memoized function remembers previous answers. The memory *is* a closure:
+
+```js
+function memoize(fn) {
+  const cache = {};               // lives in the closure — survives every call
+  return function (n) {
+    if (n in cache) return cache[n];
+    cache[n] = fn(n);
+    return cache[n];
+  };
+}
+
+const slowSquare = n => { console.log("computing…"); return n * n; };
+const fastSquare = memoize(slowSquare);
+fastSquare(4); // computing… 16
+fastSquare(4); // 16 — straight from the closure's cache, no log
+```
+
+Every higher-order utility you met in Section 9 — debounce, factories, counters — is this same shape: **outer function holds state; inner function is returned and remembers**. Recognising the shape is worth more than memorising any single utility.
+
+### Throttle — debounce's sibling (Section 9 showed debounce)
+
+Debounce waits for a *pause*. **Throttle** guarantees a maximum rate: run at most once per interval, no matter how often called — the right tool for scroll/resize handlers and "highlight as I scroll" features:
+
+```js
+function throttle(fn, limit) {
+  let lastRun = 0;
+  return function (...args) {
+    const now = Date.now();
+    if (now - lastRun >= limit) {   // enough time passed? run now
+      lastRun = now;
+      fn(...args);
+    }                                   // otherwise: drop this call entirely
+  };
+}
+```
+
+One sentence separates them in an interview: *"Debounce fires once after things quiet down; throttle fires steadily at most once per interval while things keep happening."* (There's also a trailing-edge throttle variant that fires once more at the end — name it only if asked.)
+
+> [!WARNING]
+> **The leak-shaped mistake:** closures keep whatever they capture alive. An event listener or timer closure that captures a huge object keeps that object in memory until the listener/timer is removed — which is why cleanup (Section 7 of the React notes) matters for memory as much as for correctness.
+
+> [!TIP]
+> **30-second interview answer:** "Closures power real patterns: the module pattern for private state, memoization where a returned function caches in the outer scope, and utilities like debounce and throttle built on a remembered timer. The trap is the stale closure — a callback using variables from an older render or iteration — which I fix with functional updates, correct dependencies, and cleanups."
+
+
+
+---
+
+## 📌 16. Prototypes & Classes — What `class` Really Does
+
+Classes in JavaScript look like Java or C++ classes. Underneath, they are something simpler and stranger — and interviewers know the difference. One sentence carries the whole chapter: **objects inherit directly from other objects, through a hidden link called the prototype chain.**
+
+### The chain, in one picture
+
+Every object has an internal link (written `[[Prototype]]`, accessible as `__proto__`) to another object. When you read a property JavaScript can't find on the object itself, it quietly follows the link — and keeps following until it finds the property or runs out of chain:
+
+```js
+const animal = { eats: true };
+const dog = { barks: true };
+Object.setPrototypeOf(dog, animal);   // dog → animal → Object.prototype → null
+
+dog.barks;  // true — found on dog itself
+dog.eats;   // true — not on dog, found one link up, on animal
+```
+
+Lookup goes **up** the chain; assignment never does. Writing `dog.eats = false` creates a property *on dog* that **shadows** the parent's — `animal.eats` stays `true`. That single asymmetry explains most prototype confusion.
+
+### Constructor functions — the old construction system
+
+Before `class`, shared methods were hung on a function's `prototype` property:
+
+```js
+function Person(name) { this.name = name; }
+Person.prototype.greet = function () { return `Hi, I'm ${this.name}`; };
+
+const p = new Person("Ayushi");
+p.greet(); // method found on Person.prototype, `this` = p
+```
+
+### What `new` actually does — the 4 steps interviewers ask for
+
+`new Person("Ayushi")` performs exactly four things:
+
+1. Creates a fresh empty object.
+2. Links that object's prototype to `Person.prototype`.
+3. Runs `Person` with `this` set to the new object (so `this.name = ...` fills it).
+4. Returns the new object automatically (unless the constructor returns a different object).
+
+Notice step 2: **every instance shares one copy of the methods** on the prototype instead of each object carrying its own. That's the memory-saving heart of the whole design — data differs per instance, behaviour is shared.
+
+### `class` is (mostly) sugar over exactly this
+
+```js
+class Person2 {
+  constructor(name) { this.name = name; }
+  greet() { return `Hi, I'm ${this.name}`; }
+}
+```
+
+`Person2.prototype.greet` exists just like the old version — classes changed the *spelling*, not the machine. Two genuine differences worth naming: classes must be called with `new` (calling one plainly throws), and class methods are non-enumerable. Otherwise: prototypes all the way down.
+
+### `instanceof` — "is this in your chain?"
+
+`p instanceof Person` is true exactly when `Person.prototype` appears anywhere in `p`'s chain. And since nearly every chain ends at `Object.prototype`, almost everything is `instanceof Object` — which is why `typeof` and `Array.isArray` exist for sharper questions (Section 1).
+
+```playground Prototypes: the shared-method trick
+function Person(name) { this.name = name; }
+Person.prototype.greet = function () { return "Hi, I'm " + this.name; };
+
+const a = new Person("Ayushi");
+const b = new Person("Ikra");
+console.log(a.greet(), "|", b.greet());
+console.log("same shared method?", a.greet === b.greet); // true — ONE copy, on the prototype
+a.greet = () => "custom"; // shadowing: a now has its own
+console.log(a.greet(), "|", b.greet()); // only a changed
+```
+
+> [!WARNING]
+> **Traps that actually get asked:** (1) methods defined *inside* the constructor (`this.greet = ...`) create a separate copy per instance — legal, but wasteful; (2) `Object.create(null)` makes an object with **no** prototype — no `toString`, no `hasOwnProperty` — used deliberately for pure dictionaries; (3) never reassign `__proto__` in real code; use `Object.create` / `Object.setPrototypeOf` to set it at creation, if at all.
+
+> [!TIP]
+> **30-second interview answer:** "JavaScript objects inherit from other objects through a prototype chain — a property lookup walks up the chain until it finds the property or reaches null. Classes are cleaner syntax over that same system: methods live once on the prototype and are shared by every instance, while data stays per-instance. `new` creates an object, links its prototype, runs the constructor with that object as `this`, and returns it."
+
+
+
+---
+
+## 📌 17. Generators & Iterators — Lazy Sequences
+
+A normal function runs once and returns one value. A **generator** is a function that can *pause* mid-run and hand out values one at a time, resuming exactly where it stopped. That pause button powers everything from ID counters to infinite sequences.
+
+### The smallest generator
+
+```js
+function* countToThree() {
+  yield 1;
+  yield 2;
+  yield 3;
+}
+
+const gen = countToThree();  // nothing has run yet!
+gen.next(); // { value: 1, done: false } — ran up to the first yield, then paused
+gen.next(); // { value: 2, done: false }
+gen.next(); // { value: 3, done: false }
+gen.next(); // { value: undefined, done: true } — function finished
+```
+
+Two things to say precisely: the `*` makes it a generator, and calling it doesn't run the body at all — it returns a **generator object**, and each `.next()` runs the body until the next `yield`. Variables inside keep their values between pauses (you've seen this memory trick before — the state survives because the execution is *suspended*, not finished).
+
+### Iterators — the protocol underneath
+
+Anything you can `for...of` or spread implements the **iterable protocol**: an object with a `[Symbol.iterator]()` method that returns an object with a `next()`. Strings, arrays, Maps, Sets — all iterables. Generators produce iterators automatically, which is why this just works:
+
+```js
+function* fruits() { yield "apple"; yield "mango"; }
+for (const f of fruits()) console.log(f);      // apple, mango
+console.log([...fruits()]);                    // ["apple", "mango"]
+```
+
+You can also hand-roll an iterable — interviewers occasionally ask, and it's fifteen lines that demystify `for...of` forever:
+
+```js
+const range = {
+  from: 1, to: 3,
+  [Symbol.iterator]() {
+    let current = this.from;
+    const last = this.to;
+    return {
+      next() {
+        return current <= last
+          ? { value: current++, done: false }
+          : { value: undefined, done: true };
+      },
+    };
+  },
+};
+[...range]; // [1, 2, 3]
+```
+
+### Why lazy matters — the infinite sequence
+
+Because values are produced *on demand*, a generator can describe a sequence that never ends, as long as the consumer doesn't ask for all of it:
+
+```js
+function* ids() { let id = 1; while (true) yield id++; }
+const nextId = ids();
+nextId.next().value; // 1
+nextId.next().value; // 2 — no infinite loop, because we only pull what we need
+```
+
+An array could never hold this. Pair generators with a small consumer that stops early (`take(3, ids())`) and you have real lazy pipelines — processing a huge file line by line instead of loading it all into memory is the same idea.
+
+> [!WARNING]
+> **Common mistakes:** (1) calling the generator and expecting values — you must call `.next()` or iterate; (2) iterating the same generator object twice — generators are single-use; call the function again for a fresh pass; (3) infinite generators without a consumer that stops — `[...ids()]` never finishes. Laziness needs a disciplined consumer.
+
+> [!TIP]
+> **30-second interview answer:** "A generator is a function with `function*` that pauses at each `yield` and resumes on the next `.next()` call, returning `{ value, done }` pairs. Generators implement the iterable protocol, so they work with `for...of` and spread. Their power is laziness — values are computed on demand, so they can model huge or even infinite sequences without building them in memory."
+
+
+
+---
+
+## 📌 18. Memory & Garbage Collection — Leaks, Explained Simply
+
+You never call "free this memory" in JavaScript. The engine's **garbage collector (GC)** does it for you — and understanding its one rule lets you diagnose leaks like an engineer instead of guessing.
+
+### The one rule: reachability
+
+> [!IMPORTANT]
+> Memory is freed when a value becomes **unreachable** — when no chain of references leads to it from any root (globals, the current call stack, active closures, pending timers/listeners). Reachable = alive, no matter how useless it *feels*. Unreachable = collected, sooner or later.
+
+Modern engines (V8 included) use a **mark-and-sweep** strategy at a high level: start from the roots, *mark* everything reachable, then *sweep* away the rest. You don't need algorithm depth — you need the consequence: **an accidental reference is a memory leak**, because the GC is faithfully keeping something you forgot you were holding.
+
+### The four classic leaks (all reference-shaped)
+
+**1. The accidental global.** Assign without declaring (`count = 0` in sloppy mode) and the value pins to the global object — reachable forever. Strict mode and modules make this an error; that's one quiet reason modern code leaks less.
+
+**2. The forgotten timer or listener.**
+
+```js
+const id = setInterval(refresh, 1000);   // the callback captures `bigData`
+// component unmounts / page moves on... but nobody called clearInterval(id)
+```
+
+The live timer holds its closure (and everything that closure captured — Section 15) reachable. Removal/`clearInterval` in cleanup isn't tidiness; it's memory management.
+
+**3. The growing cache with no exit.** A `Map` or object you `set` into and never delete from grows forever — memoization caches (Section 15) included. Fine for bounded key spaces; a leak for unbounded user-driven ones.
+
+**4. The detached DOM node.** Remove an element from the page but keep a JS variable pointing at it: the node (and its children) can't be collected while your reference lives. Null the reference when the UI moves on.
+
+### `WeakMap` and `WeakRef` — references that don't keep things alive
+
+```js
+const cache = new WeakMap();
+function process(user) {
+  if (cache.has(user)) return cache.get(user);   // user must be an object key
+  const result = heavyWork(user);
+  cache.set(user, result);   // when `user` itself is collected, this entry vanishes too
+  return result;
+}
+```
+
+A `WeakMap`'s keys are held **weakly**: if nothing else references the key object, the entry is collected with it. That's the right tool for "attach extra data *to* an object" (private-ish per-object state, metadata, caches keyed by object) without owning its lifetime. `WeakRef` is the same idea for a single value (`ref.deref()` gives it back — or `undefined` once collected). Name them; don't build your app on them, they make timing unpredictable by design.
+
+### How you'd actually hunt a leak (the interview-level answer)
+
+Symptom first: memory climbing over minutes of use, or a page that gets slower the longer it lives. Then: reproduce a loop (open/close the same screen ten times, watch the heap in the browser's Performance/Memory tools — the heap should come back to roughly its start, and if it stair-steps upward, something per-cycle is being retained). Usual suspects, in order: listeners/timers without cleanup, caches that only grow, references kept in module-level variables. That diagnostic story — symptom, reproduction, the usual suspects — is the answer, not a specific tool name.
+
+> [!WARNING]
+> **Trap phrasing:** "JavaScript has automatic memory management, so leaks are impossible." Wrong — leaks are *unintentional reachable references*, and the GC correctly refuses to collect anything still reachable. The bug is always a reference you forgot, never the collector.
+
+> [!TIP]
+> **30-second interview answer:** "JavaScript's garbage collector frees memory that becomes unreachable — no reference chain leading to it from a root. Leaks happen when I keep a value reachable by accident: a forgotten interval, a listener never removed, a cache that only grows, or a reference to a removed DOM node. WeakMap helps for object-keyed caches because its entries die together with the key."
+

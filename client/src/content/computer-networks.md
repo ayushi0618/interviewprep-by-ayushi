@@ -381,3 +381,319 @@ Notice what this story proves: the layers are not exam decoration. DNS, IP routi
 > First DNS converts the domain name into the server's IP address. Since that IP is on another network, my machine sends the packet to its default gateway, NAT rewrites it on the way out, and routers forward it hop by hop. Then the TCP handshake opens the connection, the TLS handshake secures it for HTTPS, and only after that does the browser send its HTTP GET request and receive the page.
 
 ---
+
+## TCP deep dive — windows, slow start, and retransmission
+
+The TCP vs UDP chapter described reliability in outline: sequence numbers, ACKs, retransmission, "flow and congestion control." This chapter opens that box, because the guaranteed follow-up is always mechanical: *how exactly does TCP avoid overwhelming the receiver — and the network?* Two different dangers, two different windows, and the sender obeys the stricter of the two.
+
+### Flow control — protecting the receiver
+
+Imagine a fast server streaming to a phone that's busy rendering. Without a brake, bytes arrive faster than the app reads them, the receive buffer overflows, and packets drop — the exact waste TCP exists to prevent. The brake is the **receive window (rwnd)**: every ACK from the receiver carries a number, "you may have this many bytes outstanding beyond what I've acknowledged — that's my free buffer." The sender must keep unacknowledged data ≤ rwnd. As the app drains the buffer, the advertised window reopens; if the app stalls, the window slides shut to zero and the sender politely probes once in a while to ask "any room yet?" That probing detail (the persist timer) is a lovely thing to mention: TCP doesn't deadlock even at a closed window.
+
+Worked numbers: segments carry **MSS = 1000 bytes**; the receiver advertises rwnd = 6000; so at most **6000 bytes = 6 segments** may be in flight unacknowledged. The sender fires segments 1–6, then *must wait* — segment 7 waits for an ACK to reopen space. When the ACK for segments 1–2 lands, the window slides forward two slots and segments 7–8 leave. This sliding is why it's called a **sliding window** protocol: a window of allowed-in-flight bytes gliding over the stream.
+
+### Congestion control — protecting the network
+
+The receiver might be happy while the *path* is drowning — a router in the middle has a queue, and when it overflows it drops packets (tail drop) regardless of anyone's window. So the sender maintains a second, self-imposed limit: the **congestion window (cwnd)**, its private estimate of what the network can hold. The real sending limit is:
+
+**Bytes in flight ≤ min(rwnd, cwnd)** — one window guards the receiver; the other guards the journey.
+
+cwnd is managed by the Internet's most successful piece of politeness, built on **AIMD** — additive increase, multiplicative decrease — driven by a dance called slow start:
+
+1. **Slow start:** cwnd begins tiny (say 1 segment) and **doubles every round-trip time**: 1, 2, 4, 8, 16… It's called "slow" only compared to blasting at full rate — it's exponential growth, probing for the ceiling quickly.
+2. **Congestion avoidance:** once cwnd crosses a threshold (**ssthresh**), growth turns linear: roughly **+1 segment per RTT**. Now we're carefully inching upward, not leaping.
+3. **On packet loss** (the smoke signal of congestion): ssthresh is set to half the current cwnd, and cwnd drops — multiplicatively. If the loss was signalled by **3 duplicate ACKs** (the receiver keeps acknowledging the same byte because later segments arrived — the pipe is clearly still flowing), **fast retransmit** resends the missing segment *now* instead of waiting for the timer, and cwnd resumes from ssthresh (fast recovery). If instead the timer expires — no ACKs at all, a worse sign — cwnd crashes back to 1 and slow start begins again.
+
+Watch one connection's life, MSS = 1 KB, ssthresh starts at 8:
+
+| Round trip (RTT) | cwnd (segments) | Phase |
+|---|---|---|
+| 1 | 1 | Slow start |
+| 2 | 2 | Slow start |
+| 3 | 4 | Slow start |
+| 4 | 8 | Reaches ssthresh → linear from here |
+| 5 | 9 | Congestion avoidance |
+| 6 | 10 | Congestion avoidance |
+| 7 | 11 | Congestion avoidance |
+| 8 | 12, then a segment is lost (3 dup ACKs) | ssthresh = 6, cwnd = 6 |
+| 9 | 7 | Linear climb resumes |
+| 10 | 8 | …and so on |
+
+The graph of cwnd over time is a **sawtooth**: exponential launch, linear climb, halving drop, climb again. Every TCP connection on Earth is tracing this pattern right now, and the collective effect is the Internet's fairness miracle: when a link congests, *everyone* halves together; capacity frees; everyone climbs together. No central controller — just identical politeness. (Modern variants like CUBIC and BBR reshape the sawtooth, but AIMD's logic is the interview canon.)
+
+### Retransmission — the timer behind the guarantee
+
+How long does the sender wait before deciding a segment died? Too short: useless resent duplicates add to congestion. Too long: every loss is a stall. TCP measures the round-trip time of segments and maintains a smoothed estimate; the **retransmission timeout (RTO)** = estimate + a safety margin proportional to how much RTT jitters. On repeated failure the RTO **doubles** each time (exponential backoff — if the network is collapsing, shout less often). Fast retransmit (above) is the shortcut that saves most losses from ever touching this timer: three duplicate ACKs is the receiver saying "everything after byte N arrived except N itself" — resend N immediately.
+
+One benign trap: duplicate ACKs can also be caused by mere reordering, so a single dup ACK means nothing — the threshold of three keeps TCP from panicking over packets that merely took a scenic route.
+
+| | Flow control | Congestion control |
+|---|---|---|
+| Protects | The receiver | The network path |
+| Window | rwnd, advertised by receiver in every ACK | cwnd, sender's private estimate |
+| Signal | Buffer space the receiver reports | Packet loss (dup ACKs / timeout), delay, ECN |
+| Who sets it | The receiving TCP | The sending TCP, via slow start + AIMD |
+| Failure it prevents | Buffer overflow at a slow receiver | Router queue overflow, congestion collapse |
+
+**Common mistakes / interview traps**
+
+- Using rwnd and cwnd interchangeably. The sender obeys **min(rwnd, cwnd)** — say which protects whom.
+- "Slow start is slow." It's exponential doubling of cwnd each RTT — slow only relative to sending at line rate immediately.
+- Thinking every loss means starting over from 1. Timeout → cwnd = 1. Three duplicate ACKs → fast retransmit, cwnd halves to ssthresh. Two very different severities.
+- Forgetting that congestion control is why TCP is *fair*: AIMD's halving and inching make competing connections converge to equal shares. UDP has no such manners — applications must add their own.
+
+### The 30-second interview answer
+
+> "TCP sends at most the minimum of two windows: rwnd, the receiver's advertised free buffer, which is flow control, and cwnd, the sender's estimate of network capacity, which is congestion control. cwnd grows exponentially in slow start until ssthresh, then linearly — additive increase; on loss it halves — multiplicative decrease — with fast retransmit on three duplicate ACKs, or a full reset to one segment on timeout. That sawtooth is what keeps the Internet both fast and fair."
+
+## Load balancers & CDNs — how big sites stay up and fast
+
+One server has hard ceilings: so many requests per second, and it's in exactly one city. Load balancers attack the first ceiling, CDNs the second, and between them they explain how a site serves millions without melting. Both are name-dropped in every system-design interview, and both reward knowing mechanism over slogan.
+
+### Load balancing — the receptionist with many doctors
+
+A **load balancer (LB)** sits in front of a pool of identical servers and assigns each incoming request to one of them — like a clinic receptionist calling patients to whichever doctor is free. The servers must be interchangeable, which forces a design rule you'll state in interviews: **keep application servers stateless** (no irreplaceable session data in one server's memory; sessions live in a shared store like Redis). Half of load-balancer questions are secretly statelessness questions.
+
+**Layer 4 vs Layer 7** — where the receptionist reads the form:
+
+| | L4 (transport layer) | L7 (application layer) |
+|---|---|---|
+| Decides by | IP addresses and ports only | URL path, headers, cookies, host |
+| Sees the request content? | No — forwards raw TCP/UDP | Yes — parses HTTP |
+| Can do | Blazing fast, protocol-agnostic | "Send `/api` to those servers, images to these," TLS termination, A/B splits |
+| Analogy | A traffic cop waving cars by licence plate region | A receptionist who reads your form and directs you to the right department |
+
+**Assignment algorithms** — the receptionist's choosing rule:
+
+| Algorithm | Rule | Pitfall it carries |
+|---|---|---|
+| Round robin | Next server in line | Assumes all requests cost the same — they don't |
+| Weighted round robin | Busier share for beefier servers | Weights go stale as machines change |
+| Least connections | Whoever has fewest active requests | A better default when request costs vary |
+| IP hash | Same client IP always lands on the same server | Buys session stickiness, sells evenness — uneven client mixes unbalance it |
+| Consistent hashing | Client/server mapped on a hash ring | The cache-tier favourite: removing one server remaps only ~1/N of keys, not everything |
+
+Two production details separate users from readers: **health checks** — the LB continuously probes each server (ideally an endpoint that verifies the app, not just an open port) and stops feeding the failures, draining a dying server gracefully. And the uncomfortable recursion: **the load balancer itself can fail** — real setups run an LB *pair* sharing a floating virtual IP, so "who balances the balancer" has an answer.
+
+### CDNs — move the content to the user
+
+Physics is the problem: light in fibre crosses continents in ~100+ ms round trip, and no code review fixes that. A **Content Delivery Network** plants caches in **edge locations** (Points of Presence) worldwide. The first visitor in Delhi requesting `logo.png` from an origin in Mumbai pays the full trip; the edge fetches it once, caches it, and serves the next thousand Delhi visitors locally in milliseconds. Effects compound: latency collapses, origin traffic collapses (a healthy 90% cache-hit ratio means the origin sees a tenth of the load), and TLS handshakes end at a nearby edge too.
+
+CDNs cache what's cacheable — static assets, images, video, increasingly whole pages for anonymous users — governed by the same `Cache-Control` headers and TTLs you met in the DNS chapter. The pain is familiar from DNS too: **invalidation**. When a file changes, stale edge copies linger until TTL expiry unless you purge — which is why deployments fingerprint filenames (`app.8f3c.js`): a new version is a new URL, and the old cache entry can simply be abandoned. When you hear senior engineers mumble about cache invalidation being one of the two hard problems in computer science — this, at planetary scale, is what they mean.
+
+### One request, end to end
+
+A user in Delhi opens a shop whose servers live in Mumbai:
+
+1. DNS (CDN-aware) resolves the site to the *nearest edge*, Delhi.
+2. The browser connects to the Delhi edge. Static assets — logo, CSS, JS — are cache hits: served in ~10 ms, origin never involved.
+3. The actual product API call isn't cacheable, so the edge forwards it over the CDN's optimized backbone to Mumbai, where an **L7 load balancer** terminates TLS and routes `/api/...` to a healthy app server chosen by least connections.
+4. The app server does its work (database, cache) and the response travels back the fast path.
+5. Total: physics-defying page, single-digit servers breathing easy.
+
+**Common mistakes / interview traps**
+
+- Making servers sticky instead of stateless. IP-hash stickiness is the workaround, not the architecture; the professional default is stateless servers + shared session store.
+- A health check that only proves the port is open while the app behind it is dead. Check an endpoint that exercises the application.
+- Proposing a CDN for personalized/dynamic data. Cache keys can't distinguish users safely by default — a cached private page served to a stranger is a legendary production incident.
+- Forgetting the LB is a single point of failure until you pair it. Every "add a load balancer" answer should reflexively add "…in an active-passive pair."
+
+### The 30-second interview answer
+
+> "A load balancer spreads requests across stateless servers — L4 forwards by IP and port blindly and fast, L7 reads the HTTP request and can route by path or cookie. Algorithms range from round robin to least connections to consistent hashing for caches, and health checks keep traffic off dead servers. A CDN instead fights distance: edge caches near users serve static content locally, cutting both latency and origin load, with fingerprinted filenames to dodge the invalidation problem."
+
+## WebSockets vs polling — getting the server to speak first
+
+HTTP has an asymmetry problem: the client asks, the server answers, and the server can *never* simply speak first. But chat messages, live scores, and stock ticks are born on the server. Four techniques bridge the gap, evolving from crude to elegant — and knowing their costs is a favourite interview probe, because every fresher app eventually faces this exact decision.
+
+### Polling — "any news? any news? any news?"
+
+The client asks every few seconds: `GET /messages/new`. Cost it honestly. **10,000 users polling every 5 seconds = 2,000 requests per second** — complete with headers, TLS, authentication checks — and if real events arrive once a minute per user, ~99% of those responses say "nothing." Average staleness is half the interval (2.5 s here): messages feel laggy *despite* the heroic server load. Mobile radios and batteries pay too. Polling's defence is simplicity and that it works everywhere, always — for a "check the count every minute" feature, it remains the correct answer.
+
+### Long polling — "wait until there IS news, then answer"
+
+The client asks; the server **holds the request open** until an event occurs or a timeout (say 30 s) approaches, then answers; the client immediately asks again. Latency becomes near-real-time and empty responses mostly vanish. Costs move subtler: servers now *hold* thousands of idle connections (connection-holding is a real resource; thread-per-connection servers suffer), timeouts must dodge proxy limits (many cut connections at 30–60 s), and each cycle still pays full HTTP header overhead. Solid, respectable, and largely superseded by the next two.
+
+### Server-Sent Events (SSE) — one-way, done right
+
+For server→client-only streams, SSE keeps one HTTP response open forever and drips events down it as simple text (`data: ...` blocks). It rides plain HTTP (proxies and load balancers tolerate it), **reconnects automatically** with a `Last-Event-ID` so missed events can be replayed, and costs almost nothing extra. Notifications, live feeds, score tickers, progress bars — if the client never needs to *speak* on the same channel, SSE is the sweet spot. Brownie point: it's just HTTP, so debugging with curl actually works.
+
+### WebSockets — the two-way upgrade
+
+When both sides must speak freely, the client sends an ordinary HTTP request with an `Upgrade: websocket` header; the server replies **101 Switching Protocols**, and the connection transforms into a persistent, full-duplex channel of tiny **frames** (a couple of bytes of header versus hundreds for HTTP). Either side sends anytime. **Ping/pong** frames keep the path alive and detect corpses. Chat, collaborative editing, multiplayer games, live dashboards with client actions — this is their home. The price: connection state now lives on your servers, so scaling means sticky load-balancing and a **pub/sub fan-out** behind them (a message published for user 42 must find whichever server holds user 42's socket — Redis pub/sub is the classic glue). Tooling, proxies, and debugging all get one notch harder than plain HTTP.
+
+| Technique | Direction | Latency | Overhead | Choose it for |
+|---|---|---|---|---|
+| Polling | Client asks repeatedly | ~½ interval stale | Very high — mostly empty responses | Rare checks, maximum simplicity |
+| Long polling | Server holds, then answers | Near real-time | High — header churn, held connections | Legacy-friendly near-real-time |
+| SSE | Server → client only | Real-time | Low, plain HTTP | Feeds, notifications, tickers, progress |
+| WebSocket | Both ways, anytime | Real-time | Lowest per message after setup | Chat, collaboration, games, trading UIs |
+
+**Common mistakes / interview traps**
+
+- Polling aggressively "for real-time feel." The math kills it: thousands of empty requests per second still deliver multi-second staleness.
+- Choosing WebSocket for a one-way feed. If the client only listens, SSE is simpler, firewall-friendlier, and auto-reconnects.
+- Forgetting WebSocket scaling: one user's socket lives on one server — without a pub/sub layer behind them, half your chat messages teleport into the void.
+- Saying long polling keeps a "connection to push through." It's still request–response; the server can only answer the *pending* request, then the cycle restarts.
+
+### The 30-second interview answer
+
+> "HTTP is client-speaks-first, so real-time features work around it. Polling is simplest but burns thousands of requests for seconds-stale data; long polling holds the request until an event, cutting latency but paying header churn and held connections. SSE streams one-way server events over plain HTTP with auto-reconnect — ideal for feeds and notifications. WebSocket upgrades the connection into a persistent two-way frame channel for chat and collaboration, and at scale it needs sticky balancing plus a pub/sub layer behind the servers."
+
+## ARP, DHCP & ICMP — the invisible helpers
+
+Before your laptop can ask for a single website, three quiet protocols have already done invisible work: **DHCP** gave it an identity, **ARP** taught it the neighbours' hardware addresses, and **ICMP** stands by to carry error reports and diagnostics. Nobody sees them when they work — which is exactly why interviewers ask. This chapter follows the first ten seconds after a laptop joins café Wi-Fi.
+
+### DHCP — "I just got here. Who am I?"
+
+A brand-new device has no IP address, doesn't know the gateway, doesn't know DNS. DHCP solves the bootstrap with a four-message dance remembered as **DORA**:
+
+1. **Discover:** With no identity at all, the laptop broadcasts from `0.0.0.0` to everyone (`255.255.255.255`): "Is there a DHCP server out there?"
+2. **Offer:** The router replies: "You may be `192.168.1.25`; your gateway is `192.168.1.1`; DNS is at `192.168.1.1` (or the ISP's); this lease lasts 24 hours."
+3. **Request:** The laptop broadcasts "I accept that offer" (broadcast, so any other offering servers hear they've been passed over).
+4. **Acknowledge:** The server confirms. Identity issued.
+
+Two details with interview value: the address is a **lease**, not a property deed — the device asks to renew at half the lease time (12 hours here), which is how cafés recycle addresses for departed customers; and DHCP is why your home devices' IPs occasionally shuffle — nothing promised permanence.
+
+### ARP — "I know the gateway's IP. But what's its MAC?"
+
+Now the laptop wants to send its first DNS query. It knows the gateway *IP* (`192.168.1.1`) from DHCP, but the Wi-Fi frame it must build needs a **destination MAC address** — the hardware name from the layered-models chapter. **ARP (Address Resolution Protocol)** bridges the two address worlds, and it works by polite shouting:
+
+1. Check the **ARP cache** first (recent answers live there for a few minutes). Empty? Ask.
+2. **Broadcast** to the whole local network: "Who has `192.168.1.1`? Tell `192.168.1.25`."
+3. The router replies directly (unicast): "I do — my MAC is `aa:bb:cc:...`."
+4. Cache it, build the frame, send the DNS query. Total cost paid once per neighbour, until the cache entry ages out.
+
+Notice the boundary: ARP broadcasts *cannot leave the subnet* — routers never forward them — because MAC addresses only have meaning on the local link. This is also why ARP is a security soft spot: there's no authentication, so a malicious device can answer "I'm the gateway" and intercept traffic (**ARP spoofing**). One honest sentence on that makes you sound like you've thought past the textbook.
+
+### ICMP — the network's messenger and error channel
+
+**ICMP (Internet Control Message Protocol)** carries no user data at all; it carries *news about* packets — the postal service's "could not deliver" slips and the diagnostic probes your tools are built on.
+
+- **ping** sends an ICMP **echo request**; the destination's echo reply plus the round-trip time proves reachability and measures latency in one stroke. (With the trap: many firewalls drop ICMP, so "ping failed" can mean "filtered," not "dead.")
+- **traceroute** (tracert on Windows) abuses the **TTL** field brilliantly. Every IP packet carries a Time-To-Live counter that each router decrements; at zero, the router discards the packet *and* sends back an ICMP "Time Exceeded" — revealing itself. So traceroute sends probes with TTL=1 (dies at and reveals router 1), TTL=2 (router 2), TTL=3… until the probe reaches the destination and an echo/port-unreachable comes back instead. The path assembles itself from the error messages of its own deaths.
+
+### The first ten seconds, assembled
+
+```
+Laptop joins café Wi-Fi
+  → DHCP (DORA): "I'm 192.168.1.25. Gateway 192.168.1.1, DNS 192.168.1.1, lease 24h."
+  → ARP broadcast: "Who has 192.168.1.1?" → the router's MAC.
+  → DNS query (inside frames addressed to that MAC): "example.com = ?"
+  → ARP again if any new local neighbour is needed; then TCP, TLS, HTTP…
+```
+
+**Common mistakes / interview traps**
+
+- "DHCP assigns MAC addresses." By the time DHCP runs, the device *has* a MAC (it's burned into the hardware) — DHCP leases it an *IP*, plus gateway and DNS.
+- "ARP resolves names like DNS does." DNS maps *names → IPs* across the planet; ARP maps *IPs → MACs* on one local link. Different layer, different universe.
+- Claiming traceroute asks routers for their names. It never asks anything — it reads the return addresses on Time Exceeded reports triggered by dying probes.
+- "ping tests whether the server is up." It tests whether ICMP echo gets answered — a live, perfectly healthy server behind an ICMP-filtering firewall pings like a corpse.
+
+### The 30-second interview answer
+
+> "DHCP bootstraps a new device with a leased IP address, gateway, and DNS servers via the Discover–Offer–Request–Acknowledge exchange. ARP then resolves the gateway's IP to its MAC address on the local link — broadcast the question, unicast the answer, cache the result — because frames need hardware addresses while routing thinks in IPs. ICMP carries the network's control messages: echo request/reply powers ping, and traceroute exploits TTL expiry so each router reveals itself by reporting the probe it killed."
+
+## HTTP/2 & HTTP/3 — same conversation, faster plumbing
+
+The methods, status codes, headers — everything you learned in the HTTP chapter — never changed across versions. What changed is *how bytes move underneath*. This is the deep dive on the one-breath summary from that chapter, because "what's new in HTTP/2 and 3?" is asked constantly and answered vaguely by almost everyone.
+
+### HTTP/1.1's ceiling
+
+Keep-alive fixed the worst waste (a fresh TCP connection per request), but one stubborn rule remains: on a single connection, **responses must return in request order**. Request a tiny CSS file behind a slow database-backed page, and it waits — **head-of-line blocking**. Browsers coped by opening ~6 parallel connections per site, and sites coped with hacks that now sound medieval: *spriting* (gluing images into one big image), *domain sharding* (more domains, more connections), *inlining* (embedding files into HTML). Every hack is a fossil of this one limitation.
+
+### HTTP/2 — many conversations, one connection
+
+HTTP/2 (2015) keeps the semantics and rebuilds the transport frustrations:
+
+- **Binary framing:** messages are chopped into small binary *frames*, each tagged with a **stream ID**. Frames from many requests interleave on one connection — true **multiplexing**. The CSS no longer queues behind the slow page; both flow simultaneously, each reassembled by stream ID.
+- **HPACK header compression:** HTTP headers are notoriously repetitive (`user-agent`, cookies, `:path` families repeat on every request). HPACK keeps a shared table of previously seen headers and sends *references* instead of text — headers shrink to a few bytes.
+- **Prioritization:** streams can declare weights so critical resources (HTML, CSS) outrank decorative ones on a congested connection.
+- **Server push** (the honest historical footnote): servers could push resources before being asked. It mostly guessed wrong, wasted bandwidth on already-cached files, and browsers have since removed it — know it as a well-intentioned feature that died of cache-blindness.
+
+But one floor remained: HTTP/2 still runs on **TCP**, and TCP promises one ordered byte stream. Lose a single packet carrying frames of five streams, and *all five stall* until retransmission — TCP knows nothing of streams. Head-of-line blocking was evicted from the application layer and took refuge one floor below.
+
+### HTTP/3 — rebuilt on QUIC, goodbye TCP
+
+HTTP/3 moves the whole thing onto **QUIC**, a transport protocol built over **UDP** (the only way to deploy a new transport without replacing every operating system on Earth):
+
+- **Streams are independent at the transport level.** QUIC's multiplexing means one lost packet stalls only its own stream; the other four keep flowing. The TCP-era blocker is gone — this is the headline.
+- **TLS 1.3 is built in**, not layered on top: transport and encryption handshakes merge, so a new connection costs **1 round trip** instead of TCP+TLS's 2–3, and a returning client can resume with **0-RTT** data (with a replay-attack caveat careful engineers mention).
+- **Connection migration:** QUIC connections are identified by a **connection ID**, not the (IP, port) pair. Walk from home Wi-Fi to 4G mid-download and your IP changes — a TCP connection dies and restarts; a QUIC connection just continues from the new address. On mobile, this is not a party trick; it's Tuesday.
+
+The fallback story matters too: some networks block or throttle UDP. Clients race both (a technique called Happy Eyeballs) and use whichever protocol answers — so HTTP/3 is an acceleration, never a requirement.
+
+| | HTTP/1.1 | HTTP/2 | HTTP/3 |
+|---|---|---|---|
+| Runs on | TCP | TCP | QUIC over UDP |
+| Streams per connection | 1 (in order) | Many, multiplexed | Many, truly independent |
+| Head-of-line blocking | Yes — full | At TCP layer only | No |
+| Header compression | None | HPACK | QPACK (HPACK's QUIC-safe sibling) |
+| Handshake cost | TCP + TLS ≈ 2–3 RTT | Same | 1 RTT (0-RTT on resumption) |
+| Survives IP change (Wi-Fi → 4G) | No | No | Yes — connection migration |
+
+**Common mistakes / interview traps**
+
+- "HTTP/3 changed the methods/status codes." Semantics are identical; it's plumbing. GET is still GET.
+- Crediting HTTP/2 with *eliminating* head-of-line blocking. It moved it down a layer — one lost TCP packet still stalls every stream. That's the very problem HTTP/3 exists to solve.
+- Assuming HTTP/3 ditched encryption. QUIC *includes* TLS 1.3 mandatorily; there is no plaintext HTTP/3.
+- Presenting server push as a current HTTP/2 feature to boast about. It's effectively deprecated — mentioning its failure earns more than reciting its promise.
+- "HTTP/3 can't work where UDP is blocked." Clients fall back to HTTP/2 over TCP automatically.
+
+### The 30-second interview answer
+
+> "All three versions share the same HTTP semantics — what changed is transport. HTTP/1.1 answers requests in order on a connection, so one slow response blocks everything behind it. HTTP/2 multiplexes many streams over one TCP connection with HPACK header compression, but a single lost TCP packet still stalls all streams. HTTP/3 runs on QUIC over UDP, making streams fully independent, folding TLS 1.3 into a one-round-trip handshake, and surviving network changes via connection IDs instead of IP addresses."
+
+## Subnetting drills — splitting networks without tears
+
+The routing chapter taught what a subnet *is* with one worked `/24`. Interviews and exams go further: they hand you a network and demand you carve it. Subnetting is pure, learnable arithmetic — two formulas and the discipline to go largest-first. This chapter is the practice set.
+
+The only rules you need:
+
+- Borrow **b** bits from the host part → you get **2^b subnets**.
+- Leave **h** host bits → each subnet holds **2^h addresses**, of which **2^h − 2 are usable** (subtract the network address and the broadcast address).
+- Quick block method: in the interesting octet, **block size = 256 − mask value**. `/26` → mask `255.255.255.192` → blocks of 64: subnets start at .0, .64, .128, .192.
+
+### Drill 1 — four equal subnets from 192.168.1.0/24
+
+Requirement: 4 subnets. 2^2 = 4, so borrow 2 bits → new prefix **/26**, mask `255.255.255.192`, 64 addresses each, **62 usable hosts** each.
+
+| Subnet | Network address | Usable hosts | Broadcast |
+|---|---|---|---|
+| 1 | 192.168.1.0/26 | .1 – .62 | .63 |
+| 2 | 192.168.1.64/26 | .65 – .126 | .127 |
+| 3 | 192.168.1.128/26 | .129 – .190 | .191 |
+| 4 | 192.168.1.192/26 | .193 – .254 | .255 |
+
+Read the table's rhythm once and you can regenerate it for any split: networks land on block boundaries (multiples of 64), the usable range is network+1 to broadcast−1, and the *next* subnet starts the moment the last one ends — subnets tile the space with no gaps and no overlaps.
+
+### Drill 2 — VLSM: different-sized departments (the real-world version)
+
+One network `192.168.10.0/24`, four needs: Dept A needs **100 hosts**, Dept B **50**, Dept C **25**, and a point-to-point link needs **2**. Equal splits waste addresses outrageously (a /26 for a 2-host link?), so use **Variable Length Subnet Masking** — and the golden rule: **allocate largest first**, so big blocks always find aligned space.
+
+1. **A, 100 hosts:** needs 2^h − 2 ≥ 100 → h=7 → **/25** (126 usable). Assign `192.168.10.0/25` → network .0, hosts .1–.126, broadcast .127. *(Uses .0–.127.)*
+2. **B, 50 hosts:** h=6 → **/26** (62 usable). Next free boundary: `192.168.10.128/26` → hosts .129–.190, broadcast .191. *(Uses .128–.191.)*
+3. **C, 25 hosts:** h=5 → **/27** (30 usable). Assign `192.168.10.192/27` → hosts .193–.222, broadcast .223. *(Uses .192–.223.)*
+4. **Link, 2 hosts:** h=2 → **/30** (2 usable — exactly right; /30 is the classic point-to-point mask). Assign `192.168.10.224/30` → hosts .225–.226, broadcast .227.
+
+Addresses .228–.255 (28 addresses) remain for growth — and because we went largest-first, they're mostly contiguous. Try smallest-first instead and watch big blocks fail to find aligned homes; that failure *is* the lesson.
+
+### Drill 3 — same subnet or not? (the gateway question in disguise)
+
+This check decides whether two devices talk directly or via the router — the "local or gateway?" decision from the routing chapter.
+
+- `10.1.1.77/25` vs `10.1.1.190/25`: block size = 256 − 128 = 128 → subnets .0–.127 and .128–.255. 77 lives in the first, 190 in the second → **different subnets** → packets go through the gateway.
+- `172.16.35.9/22` vs `172.16.36.200/22`: mask `255.255.252.0`, interesting octet is the third; block size = 256 − 252 = 4 → third-octet ranges 32–35, 36–39. 35 and 36 sit in different blocks → **different subnets**. (This one catches everyone who only ever practiced on the last octet.)
+
+**Common mistakes / interview traps**
+
+- Forgetting the **−2**. A /27 has 32 addresses but 30 usable hosts — quoting 32 costs you the question.
+- Borrowing bits for "number of subnets" from the wrong end: borrowed bits come from the *host* part, shrinking hosts per subnet. Every borrowed bit doubles subnets and halves hosts — state both effects.
+- In VLSM, allocating smallest-first and then finding no aligned space for the big subnet. Largest-first isn't politeness; it's geometric necessity.
+- Placing a subnet's network address mid-block (like `192.168.1.70/26`). Networks begin on block boundaries — .70/26 isn't a network address, it's a host *inside* .64/26.
+
+### The 30-second interview answer
+
+> "Subnetting is bit arithmetic: borrowing b bits from the host part gives 2^b subnets with 2^h − 2 usable hosts each. A /24 split four ways becomes four /26s of 62 hosts. For mixed needs I use VLSM, allocating largest first — 100 hosts gets a /25, 50 a /26, 25 a /27, a point-to-point link a /30 — so blocks stay aligned and nothing overlaps. And to test whether two addresses share a subnet, I compare their network parts under the mask: same network, direct delivery; different, via the gateway."
+
+---

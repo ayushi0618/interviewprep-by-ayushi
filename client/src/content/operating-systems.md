@@ -299,3 +299,424 @@ The one-paragraph version of this whole chapter: processes are isolated programs
 > Thrashing is when the system spends most of its time handling page faults instead of running programs, because processes keep stealing frames from each other. The usual trigger is too many processes competing for too little RAM. The fix is counterintuitive but simple — suspend some processes or add memory; a better replacement algorithm cannot save a system that is fundamentally over-committed.
 
 ---
+
+## CPU scheduling lab — FCFS, SJF, SRTF and Priority on one problem
+
+The scheduling chapter earlier gave you the algorithms and one Round Robin example. Interviews rarely stop there — they hand you a table of processes and say "run it." This chapter is that practice session: one set of processes, four algorithms, every number worked out. Learn to do this fluently and scheduling questions turn from scary to free marks.
+
+The one setup used throughout this lab:
+
+| Process | Arrival time | Burst time | Priority (lower number = more important) |
+|---|---|---|---|
+| P1 | 0 | 8 | 2 |
+| P2 | 1 | 4 | 4 |
+| P3 | 2 | 9 | 1 |
+| P4 | 3 | 5 | 3 |
+
+Remember the measures: **completion time (CT)** is when a process finishes; **turnaround time (TAT) = CT − arrival**; **waiting time (WT) = TAT − burst**; and **response time** is when it *first* gets the CPU minus its arrival — the measure users actually feel.
+
+### FCFS — first come, first served
+
+Processes run strictly in arrival order; nobody is ever preempted.
+
+```
+| P1      | P2   | P3       | P4     |
+0         8      12         21       26
+```
+
+| Process | CT | TAT | WT |
+|---|---|---|---|
+| P1 | 8 | 8 − 0 = 8 | 0 |
+| P2 | 12 | 12 − 1 = 11 | 7 |
+| P3 | 21 | 21 − 2 = 19 | 10 |
+| P4 | 26 | 26 − 3 = 23 | 18 |
+| **Average** | | **15.25** | **8.75** |
+
+See the convoy effect in the numbers: P4, a modest 5-unit job, waited 18 units purely because it arrived behind a 9-unit job. FCFS is fair in the queueing sense and often terrible in the waiting sense.
+
+### SJF — shortest job first (non-preemptive)
+
+At time 0 only P1 exists, so P1 starts — SJF can only choose among jobs that have *arrived*. When P1 finishes at 8, the ready queue holds P2 (4), P3 (9), P4 (5). Shortest first:
+
+```
+| P1      | P2   | P4     | P3       |
+0         8      12       17         26
+```
+
+| Process | CT | TAT | WT |
+|---|---|---|---|
+| P1 | 8 | 8 | 0 |
+| P2 | 12 | 11 | 7 |
+| P4 | 17 | 14 | 9 |
+| P3 | 26 | 24 | 15 |
+| **Average** | | **14.25** | **7.75** |
+
+Better than FCFS on both averages — SJF's promise — but look at P3: it waits 15 units because every shorter job jumps it. In a live system with a constant stream of short jobs, P3 might *never* run. That is starvation, and the fix is aging: a waiting job's effective priority slowly rises.
+
+### SRTF — preemptive SJF, re-decided at every arrival
+
+Now the scheduler re-evaluates whenever a new process arrives, comparing *remaining* times:
+
+- **0–1:** P1 alone. Runs 1 unit (7 left).
+- **t=1:** P2 arrives needing 4 < P1's 7. P2 preempts.
+- **1–5:** P3 arrives at 2 (9 units) and P4 at 3 (5 units); P2's remaining 3, then 2, is still the smallest, so P2 runs to completion at 5.
+- **5–10:** Remaining: P1 (7), P3 (9), P4 (5). P4 runs and finishes.
+- **10–17:** P1 (7) beats P3 (9). P1 finishes.
+- **17–26:** P3 alone, finishes at 26.
+
+```
+| P1 | P2     | P4     | P1      | P3       |
+0    1        5        10        17         26
+```
+
+| Process | CT | TAT | WT | Response time |
+|---|---|---|---|---|
+| P1 | 17 | 17 | 9 | 0 (started at 0) |
+| P2 | 5 | 4 | 0 | 0 (started at 1) |
+| P3 | 26 | 24 | 15 | 15 (first ran at 17) |
+| P4 | 10 | 7 | 2 | 2 (first ran at 5) |
+| **Average** | | **13.00** | **6.50** | |
+
+SRTF gives the best average waiting time of the four — preempting on arrival squeezes out more of SJF's advantage — at the price of more context switches and the same starvation risk for long jobs.
+
+### Priority scheduling (non-preemptive, lower number wins)
+
+Same problem, but now bursts are ignored and the priority column rules. At time 0, P1 is alone again. At time 8, the waiting jobs are P2 (priority 4), P3 (priority 1), P4 (priority 3) — so the order is P3, P4, P2:
+
+```
+| P1      | P3        | P4     | P2     |
+0         8           17       22       26
+```
+
+| Process | CT | TAT | WT |
+|---|---|---|---|
+| P1 | 8 | 8 | 0 |
+| P3 | 17 | 15 | 6 |
+| P4 | 22 | 19 | 14 |
+| P2 | 26 | 25 | 21 |
+| **Average** | | **16.75** | **10.25** |
+
+The averages are the *worst* of the four — and that is not a bug. Priority scheduling is not trying to minimise waiting; it is enforcing importance. P2 waited 21 units because the organisation said it matters least. If low-priority jobs must still eventually run, add aging; if they genuinely don't matter, this is correct behaviour.
+
+### The summary table to carry in your head
+
+| Algorithm | Avg TAT | Avg WT | What it optimises | Its disease |
+|---|---|---|---|---|
+| FCFS | 15.25 | 8.75 | Simplicity, arrival fairness | Convoy effect |
+| SJF | 14.25 | 7.75 | Average waiting | Needs future knowledge; starves long jobs |
+| SRTF | 13.00 | 6.50 | Average waiting, responsiveness | Most preemptions; starves long jobs |
+| Priority | 16.75 | 10.25 | Importance, not averages | Starves the unimportant |
+
+**Common mistakes / interview traps**
+
+- Choosing an SJF candidate that hasn't arrived yet. At time 0, "the shortest job overall" is irrelevant if it shows up at time 2.
+- In SRTF, comparing the newcomer's *full* burst against the runner's *remaining* time. Remaining vs full is the comparison — always.
+- Forgetting that waiting time excludes running time: WT = TAT − burst, not "time from arrival to first run" (that's response time).
+- Averaging over the wrong count or dropping a process from the table. Write every CT down before averaging anything — most scheduling errors are bookkeeping, not concept.
+- Assuming priority and SJF give the same order. They did not here — priority answered a different question entirely.
+
+### The 30-second interview answer
+
+> "Give me the arrival and burst table and I'll compute any of them. FCFS runs in arrival order and suffers the convoy effect — here it averaged 8.75 waiting. SJF picks the shortest arrived job and got 7.75; SRTF preempts on each arrival and did best at 6.5, but both can starve long jobs without aging. Priority scheduling ignores bursts completely — it averaged worst, 10.25, because it optimises importance, not averages. Real systems use multilevel feedback queues to get SJF-like behaviour without knowing burst times in advance."
+
+## Banker's algorithm & deadlock detection — worked
+
+The synchronization chapter introduced the banker's algorithm in one breath: *before granting a resource, check whether the system could still finish everyone*. This chapter does the arithmetic, because "explain banker's algorithm" almost always becomes "here is a table — is this state safe?"
+
+The intuition first. A careful banker never lends so much that even a perfect repayment order couldn't save the bank. The OS does the same: processes declare their **maximum** claim up front, and the OS only grants a request if, afterwards, there still exists *some* order in which every process could collect its full claim, finish, and hand everything back. That hypothetical finishing order is a **safe sequence**, and a state that has one is a **safe state**.
+
+### The cast and the tables
+
+Five processes, three resource types: A (10 total), B (5), C (7).
+
+**Allocation** (currently held) and **Max** (declared ceiling):
+
+| Process | Allocation (A B C) | Max (A B C) | Need = Max − Allocation |
+|---|---|---|---|
+| P0 | 0 1 0 | 7 5 3 | 7 4 3 |
+| P1 | 2 0 0 | 3 2 2 | 1 2 2 |
+| P2 | 3 0 2 | 9 0 2 | 6 0 0 |
+| P3 | 2 1 1 | 2 2 2 | 0 1 1 |
+| P4 | 0 0 2 | 4 3 3 | 4 3 1 |
+
+Total allocated: A = 0+2+3+2+0 = 7, B = 1+0+0+1+0 = 2, C = 0+0+2+1+2 = 5.
+
+**Available = Total − Allocated = (10−7, 5−2, 7−5) = (3, 3, 2).**
+
+### Is this state safe? The safety algorithm
+
+Pretend each process in turn gets everything it still needs, finishes, and returns all it held. Keep a running pile called **Work**, starting at Available = (3, 3, 2):
+
+1. **P1** needs (1, 2, 2) ≤ (3, 3, 2). ✓ It can finish and return its allocation (2, 0, 0). Work = (5, 3, 2). → sequence: **P1**
+2. **P3** needs (0, 1, 1) ≤ (5, 3, 2). ✓ Returns (2, 1, 1). Work = (7, 4, 3). → **P1, P3**
+3. **P4** needs (4, 3, 1) ≤ (7, 4, 3). ✓ Returns (0, 0, 2). Work = (7, 4, 5). → **P1, P3, P4**
+4. **P0** needs (7, 4, 3) ≤ (7, 4, 5). ✓ Returns (0, 1, 0). Work = (7, 5, 5). → **P1, P3, P4, P0**
+5. **P2** needs (6, 0, 0) ≤ (7, 5, 5). ✓ Done. → **P1, P3, P4, P0, P2**
+
+A safe sequence exists, so the state is **safe**. Note that the sequence is a proof, not a schedule — nobody will actually run in this order. It only proves deadlock is avoidable from here.
+
+### A request arrives — grant or deny?
+
+P1 asks for (1, 0, 2). Two cheap checks first: the request must not exceed P1's Need (1, 2, 2) — it doesn't — and must not exceed Available (3, 3, 2) — it doesn't. Now *pretend* to grant it:
+
+- Available becomes (2, 3, 0); P1's Allocation becomes (3, 0, 2); P1's Need becomes (0, 2, 0).
+
+Run safety again with Work = (2, 3, 0): P1 needs (0, 2, 0) ✓ → Work (5, 3, 2). P3 (0, 1, 1) ✓ → (7, 4, 3). P4 (4, 3, 1) ✓ → (7, 4, 5). P0 (7, 4, 3) ✓ → (7, 5, 5). P2 ✓. Safe — so the grant is real. **Granted.**
+
+Contrast: from the original state, P4 asks for (3, 3, 0). It passes both cheap checks (Need is (4, 3, 1); Available is (3, 3, 2)). Pretend to grant: Available becomes (0, 0, 2), P4's Need becomes (1, 0, 1). Safety check with Work = (0, 0, 2): P0 needs (7, 4, 3) ✗; P1 (1, 2, 2) ✗; P2 (6, 0, 0) ✗; P3 (0, 1, 1) ✗ (only 0 of B free); P4 (1, 0, 1) ✗. *Nobody* can proceed — unsafe. The request is **denied and P4 waits**, even though the resources were physically sitting free. That "even though" is the entire point of avoidance.
+
+### Detection — the other philosophy
+
+Banker's *prevents trouble in advance*, but it needs Max claims nobody honestly knows. Detection takes the opposite deal: grant freely, and periodically ask "is anyone stuck forever?" Draw a **wait-for graph** — an arrow from each waiting process to the holder of what it wants:
+
+- P1 holds the printer, wants the database (held by P2): P1 → P2
+- P2 holds the database, wants the scanner (held by P3): P2 → P3
+- P3 holds the scanner, wants the printer (held by P1): P3 → P1
+
+A cycle (P1 → P2 → P3 → P1) means deadlock — with single-instance resources, a cycle *is* the diagnosis. Recovery options, in escalating order: kill one process in the cycle (its work is lost), preempt a resource and roll its holder back to a safe point, or restart a victim and let it retry. Real databases do exactly this when they pick a deadlock victim.
+
+| Strategy | When it acts | What it costs |
+|---|---|---|
+| Prevention (lock ordering, all-at-once) | By design, before code runs | Flexibility — some designs are awkward or impossible |
+| Avoidance (banker's) | At every grant | Needs max claims in advance; re-checks constantly |
+| Detection + recovery | After deadlock forms | Periodic checking; one victim's work is thrown away |
+| Ignore ("ostrich") | Never | Occasionally, a frozen system and a manual restart |
+
+**Common mistakes / interview traps**
+
+- Confusing Need with Max in the request check. A request is compared against *Need* (what remains claimable) and *Available* — never against the full Max again.
+- Declaring a state unsafe because *one* process can't proceed. Safety only fails when *no* process can proceed at some step — order matters, and you must search for a working order.
+- "If a state is safe, no deadlock can occur" — correct conclusion, but say *why*: the safe sequence is an escape route the scheduler can always fall back to.
+- Assuming banker's runs in your laptop's OS. It mostly doesn't; it survives in resource managers and exam papers. Knowing *why* it's impractical (unknown max claims) scores more than the table mechanics alone.
+- In a wait-for graph, forgetting the single-instance caveat: with multiple copies of a resource, a cycle is suspicious, not proof.
+
+### The 30-second interview answer
+
+> "Banker's is deadlock avoidance: every process declares its maximum claim, and before granting a request the OS simulates — could everyone still finish in *some* order with what's left? If a safe sequence exists, grant; otherwise the process waits even if the resource is free. It needs claims real programs don't know, so production systems mostly use prevention by lock ordering, plus detection — find the cycle in the wait-for graph, kill a victim, let it retry."
+
+## System calls & process creation — how programs ask the OS
+
+Here is a puzzle: your program cannot touch the disk, the network card, or anyone else's memory — the hardware forbids it. Yet your code reads files all day. The resolution is that programs *ask*. A **system call** is the official request window between a running program (in **user mode**) and the kernel (in **kernel mode**, where everything is permitted). Picture a bank: customers may not walk into the vault, but they can fill a slip and hand it to the clerk, who checks it and fetches the money. The kernel is the clerk; the system call interface is the slip.
+
+### What actually happens during one system call
+
+Take `read(fd, buffer, 100)`:
+
+1. The library function `read()` places the system call's number and arguments where the kernel expects them and executes a special instruction (a *trap*).
+2. The CPU switches to kernel mode and jumps to a fixed entry point — user code cannot jump to an arbitrary kernel address, only through this gate.
+3. The kernel checks the arguments (is that file descriptor really yours? is that buffer address inside your memory?), does the work — possibly putting your process to sleep until the disk delivers — and places the result where you can see it.
+4. The CPU switches back to user mode and your program continues, none the wiser about how close it came to the hardware.
+
+That **mode switch** is why system calls cost more than ordinary function calls: a plain call is a few nanoseconds of jumping within your own program, while a system call involves the gate check, the kernel's bookkeeping, and often a context switch. A program making millions of tiny `read()` calls is paying the clerk a visit for every single spoonful — which is why buffered I/O (the library fetching a bucket at a time) exists.
+
+### The system calls worth naming
+
+| Call | What it asks the kernel to do |
+|---|---|
+| `fork()` | Create a child process that is a copy of me |
+| `exec()` | Replace my program image with a different program (same process) |
+| `wait()` | Sleep until one of my children finishes, and collect its exit status |
+| `exit()` | Terminate me, with this status code |
+| `open()` / `close()` | Give me a handle to a file / release it |
+| `read()` / `write()` | Move bytes between a handle and my memory |
+| `pipe()` | Create a one-way byte channel between related processes |
+| `socket()` | Create a network communication endpoint |
+
+Everything else — `printf`, `malloc`, your language's file objects — is a library convenience layered over these. When an interviewer asks "how does `printf` reach the screen?", the chain they want is: `printf` formats text into a buffer, and sooner or later calls `write()` — a system call — and only the kernel talks to the display.
+
+### fork() — the strangest function you will ever call
+
+`fork()` is called once and **returns twice**: once in the parent (returning the child's PID) and once in the child (returning 0).
+
+```c
+pid_t pid = fork();
+if (pid < 0) {
+    // fork failed — no child was created
+} else if (pid == 0) {
+    // child process: "pid is 0 because I am the child"
+    execlp("ls", "ls", NULL);   // replace myself with the ls program
+} else {
+    // parent process: pid is the child's ID, e.g. 4217
+    wait(NULL);                  // sleep until the child finishes
+}
+```
+
+That little program is literally how your shell runs every command: the shell forks itself, the child `exec`s the command, the parent waits, then prints the next prompt. Three details interviewers probe:
+
+- **Copy-on-write:** the child starts as a logical copy of the parent, but the OS doesn't duplicate memory pages until one of them writes. A fork is therefore cheap even for a huge process.
+- **exec keeps the PID.** It swaps the program inside the process — same identity, new code. `fork` creates a process; `exec` changes what it runs. Neither alone is "run a new program"; shells combine them.
+- **Forget `wait()`, get a zombie.** A finished child whose parent never called `wait()` lingers as a zombie entry — the lifecycle leftover from the processes chapter.
+
+### Talking between processes — IPC
+
+Threads share memory and can simply read variables. Processes cannot, so the OS offers channels:
+
+| Mechanism | Shape | Related processes only? | Speed | Plain-words version |
+|---|---|---|---|---|
+| Pipe | One-way byte stream | Yes (inherited across fork) | Medium | A garden hose between parent and child |
+| Named pipe (FIFO) | One-way byte stream | No — any process can open it | Medium | A hose with a public tap |
+| Message queue | Discrete messages, kernel-held | No | Medium | A post office box of labelled envelopes |
+| Shared memory | A common RAM region | No (set up once) | **Fastest** — no copying through the kernel | A shared whiteboard both can write on |
+| Semaphore | Synchronisation signals | No | — | The traffic light for the whiteboard |
+| Socket | Two-way byte stream | No — works across machines | Medium | A phone line |
+
+Shared memory wins on speed because data doesn't get copied through the kernel on every message — but you must bring your own synchronization (semaphores/mutexes on the whiteboard), which is why it's powerful and dangerous in equal measure. Pipes and message queues make the kernel copy data, paying a little speed for safety and simplicity.
+
+**Common mistakes / interview traps**
+
+- "fork() creates a thread." No — fork creates a *process* (new address space); thread creation is a different, lighter API.
+- Saying the child is an exact physical copy immediately. Copy-on-write defers the copying until someone writes — say it; it shows you know fork is cheap.
+- Confusing fork and exec responsibilities: fork clones, exec replaces. "How does a shell start a program?" = fork + exec + wait, all three.
+- Treating `printf` as a system call. It's a buffered library function; `write` underneath is the syscall.
+- Claiming user programs can "just read the file themselves." In user mode they physically cannot touch the disk — that's the point of the protection rings.
+
+### The 30-second interview answer
+
+> "Programs run in user mode where hardware access is forbidden, so they request services through system calls — a controlled trap into kernel mode where the kernel validates the request and does the work. `fork()` creates a child process that returns twice, `exec()` replaces the program image inside a process, and the shell launching a command is just fork + exec + wait. Related processes talk through pipes; anything needing speed uses shared memory plus semaphores for synchronisation."
+
+## Disk scheduling — the elevator in your hard drive
+
+A spinning hard disk reads data with a mechanical arm that must physically swing to the right track. When many read/write requests queue up, the order you serve them in decides how far that arm travels — and arm travel is time. **Disk scheduling** is FIFO vs SJF all over again, but with a moving head instead of a CPU. The analogy every textbook uses is an elevator: serving floors in a sane sweep beats zigzagging to requests in arrival order. (SSDs have no arm, and we'll close with why this still gets asked.)
+
+Our worked example, the classic setup: the request queue is **98, 183, 37, 122, 14, 124, 65, 67**; the head starts at track **53** on a disk with tracks 0–199.
+
+### FCFS — in arrival order, arm be damned
+
+Serve 98, 183, 37, 122, 14, 124, 65, 67 exactly as they arrived. The head travels:
+
+| Leg | Distance |
+|---|---|
+| 53 → 98 | 45 |
+| 98 → 183 | 85 |
+| 183 → 37 | 146 |
+| 37 → 122 | 85 |
+| 122 → 14 | 108 |
+| 14 → 124 | 110 |
+| 124 → 65 | 59 |
+| 65 → 67 | 2 |
+| **Total head movement** | **640 tracks** |
+
+Look at the shape of that: 183 down to 37, back up to 122, down to 14, up to 124. The arm is doing long, pointless laps while requests wait. FCFS is perfectly fair — nobody is ever passed over — and perfectly wasteful.
+
+### SSTF — shortest seek time first
+
+Always serve the pending request nearest the current head position — SJF wearing a different hat:
+
+```
+53 → 65 (12) → 67 (2) → 37 (30) → 14 (23) → 98 (84) → 122 (24) → 124 (2) → 183 (59)
+Total: 236 tracks
+```
+
+236 instead of 640 — a massive saving, bought by greediness. And it inherits SJF's disease exactly: a steady stream of requests near one end of the disk can keep the arm there forever while requests at the far end starve. Disk starvation is not theoretical; busy servers once lost far-out requests for seconds at a time.
+
+### SCAN — the actual elevator
+
+The head sweeps in one direction serving everything on the way, reaches the far end, reverses, and sweeps back. Suppose the head is moving toward *larger* track numbers:
+
+```
+53 → 65 → 67 → 98 → 122 → 124 → 183 → (199, the end) → 37 → 14
+Total: (199 − 53) + (199 − 14) = 146 + 185 = 331 tracks
+```
+
+Total movement (331) is worse than SSTF (236) but better than FCFS (640), and the waiting is far more even: no request can be indefinitely postponed, because the sweep *will* come back. Elevators behave identically for the same reason — a building that used SSTF would leave the penthouse waiting all morning.
+
+### C-SCAN — one direction only, then fly back
+
+C-SCAN serves only on the upward sweep; at the top it jumps straight back to track 0 (counted as travel) and sweeps up again:
+
+```
+53 → 65 → 67 → 98 → 122 → 124 → 183 → (199) → (jump to 0) → 14 → 37
+Total: (199 − 53) + 199 + 37 = 382 tracks
+```
+
+The head moves *more* than SCAN, so why bother? Uniformity: in SCAN, requests just behind the head wait for a full round trip and get served in bunches at the extremes; C-SCAN treats the disk as a circle, giving every region the same rhythmic visit pattern. Fairness of *waiting time distribution* is the product being bought.
+
+### LOOK and C-LOOK — don't go to the end
+
+SCAN wastes travel going to the physical end when no request waits there. **LOOK** reverses at the furthest *request* instead: here it turns at 183 and ends at 14, for (183 − 53) + (183 − 14) = 130 + 169 = **299 tracks**. C-LOOK is the same idea with the circular jump. Most real "SCAN" implementations are really LOOK.
+
+| Algorithm | Total movement (tracks) | Starvation? | Character |
+|---|---|---|---|
+| FCFS | 640 | No | Fair order, wild arm |
+| SSTF | 236 | **Yes** | Greedy shortest-seek; SJF's twin |
+| SCAN | 331 | No | Elevator sweep, direction-bound bias |
+| C-SCAN | 382 | No | Uniform wait, most travel |
+| LOOK | 299 | No | SCAN without the empty trips |
+
+Beyond seek time, a real disk request also pays **rotational latency** (waiting for the platter to spin the right sector under the head — on average half a revolution) and **transfer time**. Scheduling can only affect the first; that's still the dominant term on a busy disk.
+
+> [!NOTE]
+> The SSD question, answered honestly: an SSD has no head, so "seek distance" is meaningless and these algorithms don't run on modern storage. What survives is the *shape of the thinking* — batching and reordering requests to reduce wasted motion — plus the fact that interviewers and exams still love the arithmetic. Modern OS disk schedulers mostly merge adjacent requests and enforce deadlines so no request waits forever.
+
+**Common mistakes / interview traps**
+
+- In SCAN, forgetting the trip to the physical end (or the jump in C-SCAN) in the total. The end/jump travel counts — it's the most common arithmetic slip in this topic.
+- Serving requests "in queue order" during a sweep. A sweep serves by *position along the path*, not arrival order.
+- Claiming SSTF is "optimal." It's optimal only greedily, step by step — 236 here is luck of this queue, and starvation is its price.
+- Mixing up seek time with rotational latency. The arm moving is the seek; the platter spinning into place is rotation. Scheduling attacks the seek.
+
+### The 30-second interview answer
+
+> "Disk scheduling orders pending requests to minimise head travel. On the classic queue, FCFS travels 640 tracks because the arm zigzags, SSTF greedily serves the nearest request and cuts it to 236 but can starve distant requests, and SCAN sweeps like an elevator — 331 tracks with fair, bounded waits. C-SCAN serves one direction only for uniform waiting, and LOOK skips the empty trip to the disk's end. On SSDs there's no head, but the batching and fairness thinking survives."
+
+## Page tables in depth — multilevel, inverted, and TLB reach
+
+The memory chapters introduced the page table as a simple map: page number in, frame number out. That map has a size problem worth doing arithmetic on, because the fix — multilevel page tables — is a standard deep-dive question.
+
+### The size problem, in numbers
+
+Take a 32-bit system with 4 KB pages. The address splits into a 20-bit page number and a 12-bit offset (2^12 = 4096 bytes per page). A flat, single-level page table needs one entry per page: 2^20 = about a million entries. At 4 bytes per entry, that's **4 MB of page table — per process**. Run 100 processes and 400 MB of your RAM is nothing but maps. Worse, that 4 MB traditionally had to be contiguous, and most of it maps regions a given process never uses (the empty space between its heap and its stack). A 64-bit address space makes flat tables flatly impossible: 2^52 entries is not a table, it's a fantasy.
+
+### Multilevel page tables — only build the map for streets that exist
+
+Split the 20-bit page number into two 10-bit halves (10 + 10 + 12 = 32):
+
+```
+|  p1 (10 bits)  |  p2 (10 bits)  |  offset (12 bits)  |
+```
+
+- **p1** indexes a **page directory** of 1024 entries (4 KB — exactly one page). Each entry points to a second-level page table.
+- **p2** indexes that second-level table (also 1024 entries, 4 KB), whose entries hold actual frame numbers.
+
+The trick: second-level tables are only allocated for regions of the address space the process actually uses. A typical process uses a few MB near the bottom (code/heap) and a few near the top (stack), so it might need the 4 KB directory plus two or three second-level tables — say **12–16 KB total instead of 4 MB** — while a process that truly maps everything can still grow the rest on demand. The cost is a longer walk: two memory reads for translation before the data read itself. Which is exactly why the TLB exists, and why real CPUs add **page-walk caches** that remember intermediate directory entries.
+
+64-bit systems simply take the idea further — four levels are standard on x86-64 (splitting the page number into 9+9+9+9 bits with a 12-bit offset). Same principle, taller tree, and again: unbuilt branches cost nothing.
+
+### TLB reach — the number that sizes your fast memory
+
+The TLB only helps if the translations your program needs *fit* in it. **TLB reach = number of TLB entries × page size** — the total memory footprint that can be translated without a single table walk.
+
+Do the arithmetic for a 128-entry TLB:
+
+- With 4 KB pages: 128 × 4 KB = **512 KB** of reach. A program churning through 50 MB of scattered data will miss constantly.
+- With 2 MB **huge pages**: the same 128 entries reach 128 × 2 MB = **256 MB**. Same TLB, 500× the coverage.
+
+That's the whole reason huge pages exist: databases and other big-footprint programs enable them so their working set fits in TLB reach, converting a flood of page walks into hits. It costs nothing but page granularity — the trade-off is internal fragmentation on a grander scale.
+
+### Inverted page tables — flip the question
+
+A multilevel table answers "which frame holds *this process's* page 7?" An **inverted page table** asks the opposite: "what does frame 42 hold?" There is exactly one entry per physical frame in the whole machine, storing *(process ID, page number)*. If the machine has 1 million frames (4 GB with 4 KB pages) at 8 bytes per entry, the table is **8 MB total, system-wide** — independent of how many processes run or how wide their virtual addresses are. That's the seduction for 64-bit systems.
+
+The catch is lookup: you arrive with (PID, page) and need to find which frame entry matches — searching the table in the wrong direction. Systems use a hash of (PID, page) to land near the right entry, with chains for collisions. It works, but lookups are slower and less predictable than the multilevel walk, and shared pages are awkward (one frame, potentially many owners — the inverted table can name only one). Hence the real world: multilevel tables dominate general computing; inverted tables appear in some server architectures and in exam questions about table size.
+
+| | Multilevel page table | Inverted page table |
+|---|---|---|
+| Entries sized by | Virtual pages (per process) | Physical frames (one per system) |
+| One lookup means | Index, index, (index, index…) by address bits | Hash (PID, page) and walk a collision chain |
+| Table size grows with | Regions the process actually maps | RAM size only |
+| Shared pages | Natural — two tables point at one frame | Awkward — one frame entry, many owners |
+| Where it lives | x86, ARM, everywhere mainstream | Some server designs, and interviews |
+
+**Common mistakes / interview traps**
+
+- Answering "the 64-bit page table would be [astronomical] bytes, so paging is impossible." It's multilevel and demand-allocated — only the branches in use exist.
+- Quoting TLB size when asked TLB *reach*. Reach is entries × page size — that's why huge pages change the answer without any new hardware.
+- Saying multilevel tables are slower, period. With a TLB hit (the overwhelming majority of accesses) the levels cost nothing; the deeper walk is paid only on a miss, and page-walk caches soften even that.
+- Assuming the inverted table is per-process. The inversion's entire charm is one table for the machine.
+- Forgetting each intermediate level adds a memory reference on a walk: 2-level = 2 reads + the data access; 4-level = 4 + 1. That's the number that makes TLB hit ratio sacred.
+
+### The 30-second interview answer
+
+> "A flat 32-bit page table costs 4 MB per process, most of it mapping unused regions, so systems split the page number into levels — a small directory pointing to second-level tables that are allocated only where the process actually has memory. 64-bit machines use four levels the same way. The TLB's reach is entries times page size, which is why huge pages exist: the same TLB covers megabytes instead of kilobytes. Inverted page tables flip it entirely — one entry per real frame for the whole machine — trading slower hash lookups for a table that never grows with virtual address width."
+
+---

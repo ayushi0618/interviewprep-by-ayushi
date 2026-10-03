@@ -664,3 +664,894 @@ One line per name, so the two stop blurring:
 - [ ] **Indexes** — faster reads on filtered/joined columns; slower writes + disk cost
 - [ ] **Normalization** — 1NF atomic, 2NF whole-key, 3NF no non-key dependencies
 - [ ] **SQL ≠ MySQL** — SQL is the language; MySQL/PostgreSQL/SQLite are products
+## 🪟 9. Window Functions Deep Dive
+
+Chapter 6C gave you `ROW_NUMBER()`, `RANK()`, and `DENSE_RANK()`. That's the doorway. This chapter is the rest of the house — the functions interviewers use to test whether you can think *across* rows without collapsing them.
+
+Remember the core idea: a window function looks at a "window" of related rows, computes something, and sticks the answer back on *every* row. No rows disappear.
+
+```sql
+-- employees(id, name, dept_id, salary, hire_date)
+-- monthly_sales(month, revenue)
+```
+
+### LAG and LEAD — peeking at neighbours
+
+`LAG(col, n)` reads the value from the row `n` steps *before* the current row (inside the same window). `LEAD(col, n)` reads `n` steps *after*. The default `n` is 1.
+
+```sql
+SELECT month, revenue,
+  LAG(revenue) OVER (ORDER BY month) AS prev_month,
+  LEAD(revenue) OVER (ORDER BY month) AS next_month
+FROM monthly_sales;
+```
+
+| month | revenue | prev_month | next_month |
+|---|---|---|---|
+| 2026-01 | 100000 | NULL | 120000 |
+| 2026-02 | 120000 | 100000 | 90000 |
+| 2026-03 | 90000 | 120000 | NULL |
+
+First row has no previous month, so `LAG` gives `NULL`. Last row has no next month, so `LEAD` gives `NULL`. That's not a bug — it's honest.
+
+> [!TIP]
+> `LAG(revenue, 1, 0)` — the third argument is the value to use when there is no previous row, instead of `NULL`. Handy for `revenue - prev` maths.
+
+🎤 What the interviewer actually asks: "How do you compare this month's sales with last month's in one query?" — `LAG` in the same `SELECT`, no self-join needed.
+
+### Worked example 1 — month-over-month growth
+
+```sql
+SELECT month, revenue,
+  LAG(revenue) OVER (ORDER BY month) AS prev_revenue,
+  revenue - LAG(revenue) OVER (ORDER BY month) AS change_amount,
+  ROUND(
+    100.0 * (revenue - LAG(revenue) OVER (ORDER BY month))
+    / LAG(revenue) OVER (ORDER BY month), 1
+  ) AS growth_pct
+FROM monthly_sales
+ORDER BY month;
+```
+
+| month | revenue | prev_revenue | change_amount | growth_pct |
+|---|---|---|---|---|
+| 2026-01 | 100000 | NULL | NULL | NULL |
+| 2026-02 | 120000 | 100000 | 20000 | 20.0 |
+| 2026-03 | 90000 | 120000 | -30000 | -25.0 |
+
+Division by the previous month is why the first row stays `NULL` — dividing by `NULL` gives `NULL`, which is exactly what "no growth rate yet" means. Cleaner still, compute `LAG` once in a subquery or CTE (chapter 10) and reuse the alias — window results exist by the time an outer query reads them.
+
+### Running totals — the frame is the whole game
+
+A running total is just `SUM(...) OVER (ORDER BY ...)`, but the bit that controls *which* rows get summed is called the **frame**.
+
+```sql
+SELECT name, salary,
+  SUM(salary) OVER (ORDER BY hire_date
+    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_payroll
+FROM employees;
+```
+
+Read the frame out loud: "from the very first row (`UNBOUNDED PRECEDING`) up to and including me (`CURRENT ROW`)." That's a running total.
+
+| Frame phrase | Means |
+|---|---|
+| `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` | Start of partition → current row (running total) |
+| `ROWS BETWEEN 2 PRECEDING AND CURRENT ROW` | Previous 2 rows + current (3-row moving sum) |
+| `ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING` | Current row → end of partition |
+| `ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING` | Previous, current, next (centred window) |
+| `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` | Whole partition (same value on every row) |
+
+```sql
+-- 3-month moving average of revenue
+SELECT month, revenue,
+  ROUND(AVG(revenue) OVER (
+    ORDER BY month ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+  ), 0) AS moving_avg_3
+FROM monthly_sales;
+```
+
+> [!WARNING]
+> **`ROWS` vs `RANGE` trap.** The default frame (when you write `OVER (ORDER BY x)` with no frame) is `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`. With `RANGE`, rows that *tie* on the ORDER BY value are treated as one group — both get the same total. With `ROWS`, each physical row advances the sum. If two employees share a hire_date, a default-frame running total can "jump" by both salaries at once. In interviews, write the frame out explicitly: `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`. Explicit beats default every time.
+
+### Worked example 2 — running salary total, reset per department
+
+`PARTITION BY` restarts the window per group, so the running total resets too:
+
+```sql
+SELECT dept_id, name, salary,
+  SUM(salary) OVER (
+    PARTITION BY dept_id
+    ORDER BY salary DESC
+    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+  ) AS cumulative_salary_in_dept
+FROM employees
+ORDER BY dept_id, salary DESC;
+```
+
+Each department starts again from its own top earner. "Cumulative cost until we have covered the top N earners in each department" is now a one-liner — that kind of question is precisely why frames exist.
+
+🎤 What the interviewer actually asks: "Show each employee's salary and the total salary paid to everyone hired up to and including them." — `SUM(salary) OVER (ORDER BY hire_date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`.
+
+### NTILE — slicing a group into buckets
+
+`NTILE(n)` chops the ordered window into `n` roughly equal buckets and labels them 1..n.
+
+```sql
+SELECT name, salary,
+  NTILE(4) OVER (ORDER BY salary DESC) AS salary_quartile
+FROM employees;
+```
+
+Quartile 1 = top 25% earners. This is "split employees into salary bands", "top decile of customers" (`NTILE(10)`, keep bucket 1) — questions that are painful with plain `GROUP BY` and trivial here.
+
+### FIRST_VALUE and LAST_VALUE
+
+```sql
+SELECT dept_id, name, salary,
+  FIRST_VALUE(name) OVER (
+    PARTITION BY dept_id ORDER BY salary DESC
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+  ) AS top_earner_in_dept
+FROM employees;
+```
+
+Every row now carries its department's top earner's name — compare `salary` against the top in the same row, no join needed. `FIRST_VALUE` is safe with any frame because "first" never moves.
+
+> [!WARNING]
+> **`LAST_VALUE` needs the full frame.** With the default frame (start → current row), the "last" row of the frame *is* the current row, so `LAST_VALUE` just returns your own value — a famous gotcha. Always give `LAST_VALUE` the full frame: `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`. For "value at the other end", many people prefer `FIRST_VALUE(...) OVER (... ORDER BY x DESC)` — same result, no trap.
+
+### Window function vs GROUP BY — when which
+
+| Question shape | Tool |
+|---|---|
+| "One summary row per department" | `GROUP BY` |
+| "Each employee, plus their rank / dept average / previous row" | Window function |
+| "Top 3 per group, keeping all columns" | Window + outer filter |
+| "Compare each row with the row before/after" | `LAG` / `LEAD` |
+| "Running / cumulative total" | `SUM() OVER (... ROWS BETWEEN ...)` |
+
+> [!NOTE]
+> **One-line interview answer:** "Window functions compute across related rows without collapsing them — `PARTITION BY` defines the group, `ORDER BY` the sequence inside it, and the frame (`ROWS BETWEEN ...`) defines exactly which rows each calculation can see."
+
+> [!NOTE]
+> **30-second interview answer:** "`LAG` and `LEAD` peek at neighbouring rows, so month-over-month growth is `revenue - LAG(revenue) OVER (ORDER BY month)` in one pass. A running total is `SUM(x) OVER (ORDER BY d ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)` — the frame says which rows feed each sum, and `PARTITION BY` restarts it per group. `NTILE(4)` buckets rows into quartiles, and `FIRST_VALUE` stamps a group's top value onto every row. I always write the frame explicitly, because the default `RANGE` frame treats ORDER BY ties as one step."
+
+## 🧩 10. CTEs & Recursive Queries
+
+A **CTE** (Common Table Expression) is a named, temporary result set you define with `WITH` at the top of a query, then use like a table. It doesn't make anything faster by magic — it makes the query *readable in the order you think*.
+
+### The basic shape
+
+```sql
+WITH high_earners AS (
+  SELECT id, name, dept_id, salary
+  FROM employees
+  WHERE salary > 80000
+)
+SELECT * FROM high_earners
+WHERE dept_id = 10;
+```
+
+Read it top to bottom: "First, define high earners. Then, filter them." Compare that with the nested-subquery version, which you have to read inside-out. Same result — very different debugging experience at 2 AM.
+
+### Multi-step pipelines — where CTEs earn their keep
+
+Mental model: each CTE is one step on a conveyor belt. Later CTEs can use earlier ones.
+
+```sql
+WITH dept_totals AS (
+  -- Step 1: one row per department
+  SELECT dept_id, COUNT(*) AS headcount, SUM(salary) AS total_salary
+  FROM employees
+  GROUP BY dept_id
+),
+dept_avg AS (
+  -- Step 2: reuse step 1
+  SELECT dept_id, headcount, total_salary,
+         total_salary / headcount AS avg_salary
+  FROM dept_totals
+),
+big_depts AS (
+  -- Step 3: filter step 2
+  SELECT dept_id, avg_salary
+  FROM dept_avg
+  WHERE headcount >= 5
+)
+-- Step 4: present it nicely
+SELECT d.dept_name, b.avg_salary
+FROM big_depts b
+JOIN departments d ON d.id = b.dept_id
+ORDER BY b.avg_salary DESC;
+```
+
+| Habit | Why it wins interviews |
+|---|---|
+| One job per CTE | Each step is checkable in isolation |
+| Name steps like English | `high_earners`, not `cte1` |
+| Filter early inside a CTE | Later steps carry fewer rows |
+| Final SELECT only joins + presents | The thinking already happened above |
+
+🎤 What the interviewer actually asks: "This query has three nested subqueries — clean it up." — Rewrite as a `WITH` pipeline, one named step at a time.
+
+> [!TIP]
+> **Debugging trick:** run the query with only the first CTE defined and `SELECT * FROM step_one`. Then add one step at a time. A CTE pipeline is debuggable in slices; a nested subquery is an onion you cry over.
+
+### Recursive CTEs — querying a tree
+
+Org charts, category trees, folder structures — data where a row points at its *parent* row (`manager_id`). A plain join gets you one level. A recursive CTE walks *all* levels.
+
+It always has three parts:
+
+1. **Anchor member** — the starting rows (the top of the tree), a normal `SELECT`.
+2. `UNION ALL` — the glue.
+3. **Recursive member** — a `SELECT` that joins the table back to the CTE itself, finding the *next* level. It stops when it finds no more rows.
+
+```sql
+-- employees(id, name, manager_id) — CEO has manager_id NULL
+WITH RECURSIVE org AS (
+  -- 1. Anchor: the CEO
+  SELECT id, name, manager_id, 0 AS level
+  FROM employees
+  WHERE manager_id IS NULL
+
+  UNION ALL
+
+  -- 3. Recursive: everyone who reports to someone already found
+  SELECT e.id, e.name, e.manager_id, o.level + 1
+  FROM employees e
+  JOIN org o ON e.manager_id = o.id
+)
+SELECT * FROM org ORDER BY level, name;
+```
+
+Trace it on a tiny company — CEO Asha, managers Bala and Chitra under her, Dev and Esha under Bala:
+
+| Round | What the recursive member finds |
+|---|---|
+| Anchor | Asha (level 0) |
+| Round 1 | Bala, Chitra (level 1) — their manager Asha is now in `org` |
+| Round 2 | Dev, Esha (level 2) — their manager Bala is in `org` |
+| Round 3 | Nobody new → recursion stops |
+
+Final result:
+
+| id | name | manager_id | level |
+|---|---|---|---|
+| 1 | Asha | NULL | 0 |
+| 2 | Bala | 1 | 1 |
+| 3 | Chitra | 1 | 1 |
+| 4 | Dev | 2 | 2 |
+| 5 | Esha | 2 | 2 |
+
+### Worked example — print the tree with indentation and path
+
+Two classic upgrades: build the full reporting path, and indent by level.
+
+```sql
+WITH RECURSIVE org AS (
+  SELECT id, name, manager_id, 0 AS level,
+         CAST(name AS CHAR(1000)) AS path
+  FROM employees
+  WHERE manager_id IS NULL
+
+  UNION ALL
+
+  SELECT e.id, e.name, e.manager_id, o.level + 1,
+         CONCAT(o.path, ' > ', e.name)
+  FROM employees e
+  JOIN org o ON e.manager_id = o.id
+)
+SELECT CONCAT(REPEAT('  ', level), name) AS org_chart, path
+FROM org
+ORDER BY path;
+```
+
+```
+Asha
+  Bala
+    Dev
+    Esha
+  Chitra
+```
+
+The same pattern fits a category tree (`categories(id, name, parent_id)`): anchor on `parent_id IS NULL`, recurse on children. One shape, many costumes.
+
+> [!WARNING]
+> **Infinite recursion:** if the data has a cycle (A's manager is B, B's manager is A), the recursive member never runs dry. MySQL stops at `cte_max_recursion_depth` (default 1000) and errors. PostgreSQL behaves similarly. When you write one, add a depth guard while testing: `WHERE o.level < 20` inside the recursive member.
+
+> [!NOTE]
+> **One-line interview answer:** "A CTE names one step of a query so the final SELECT reads top-to-bottom; a recursive CTE adds a self-joining second SELECT that walks a parent–child tree level by level until no new rows appear."
+
+> [!NOTE]
+> **30-second interview answer:** "I use CTEs to turn nested subqueries into a named pipeline — define one step, reuse it in the next, and debug by running each step alone. Recursive CTEs handle trees like org charts: an anchor SELECT picks the root, `UNION ALL` glues on a recursive SELECT that joins the table back to the CTE on `manager_id = id`, adding one level per round until nothing new matches. The same pattern prints indented trees and full paths with a little `CONCAT` work."
+
+## 🔍 11. Why a Query Ignores Your Index
+
+You created the index. The query is still slow. This is the most practical chapter in this guide — interviewers at product companies ask it verbatim: *"The index exists, so why is MySQL not using it?"*
+
+Usually the answer is one of five reasons.
+
+### Reason 1 — Selectivity: the index doesn't narrow anything
+
+An index helps when the condition *throws away most rows*. If `WHERE is_active = 1` matches 95% of the table, walking the index and then fetching 95% of the rows is *more* work than one full scan — so the optimiser skips the index **on purpose**. It's right to.
+
+Rule of thumb: index conditions that select a small slice. Status flags, booleans, and gender columns are usually poor indexes on their own (but useful as part of a composite — see below).
+
+### Reason 2 — Composite indexes and the leftmost prefix rule
+
+A composite index on `(dept_id, salary)` is sorted first by `dept_id`, then by `salary` within each department — like a phone book sorted by last name, then first name.
+
+```sql
+CREATE INDEX idx_dept_salary ON employees(dept_id, salary);
+```
+
+| Query filter | Uses the index? | Why |
+|---|---|---|
+| `WHERE dept_id = 10` | ✅ Yes | Leftmost column present |
+| `WHERE dept_id = 10 AND salary > 80000` | ✅ Yes, fully | Both columns, in order |
+| `WHERE salary > 80000` | ❌ No | Skips `dept_id` — phone book can't help by first name alone |
+| `WHERE dept_id = 10 AND salary > 80000 ORDER BY salary` | ✅ Bonus | Index order already *is* salary order inside the dept |
+
+🎤 What the interviewer actually asks: "Index on `(a, b, c)` — will `WHERE b = ? AND c = ?` use it?" — No. Leftmost column `a` is missing, so the sorted order is unusable.
+
+### Reason 3 — A function wrapped around the column
+
+```sql
+-- ❌ Index on join_date is useless here
+SELECT * FROM employees WHERE YEAR(join_date) = 2026;
+
+-- ✅ Rewrite so the bare column is compared to a range
+SELECT * FROM employees
+WHERE join_date >= '2026-01-01' AND join_date < '2027-01-01';
+```
+
+The index is sorted by `join_date`, not by `YEAR(join_date)`. Wrapping the column in a function means the database must compute the function on *every row* to check it — that's a full scan wearing a costume. Same trap: `LOWER(name) = 'ayushi'`, `salary + 1000 > 50000`, `DATE(created_at) = '2026-10-03'`. Always move the maths to the *other* side of the comparison.
+
+### Reason 4 — LIKE with a leading wildcard
+
+```sql
+WHERE name LIKE 'Ay%'    -- ✅ can use index (sorted names, find the 'Ay' range)
+WHERE name LIKE '%yushi' -- ❌ cannot (names aren't sorted by their endings)
+```
+
+A B-tree is sorted left to right. `'%yushi'` says "I don't know how it starts" — there's no sorted order to search, so it's a scan. (Real fix for suffix search is a different tool — full-text index or a trigram index — worth naming in an interview.)
+
+### Reason 5 — Implicit type conversion
+
+```sql
+-- phone column is VARCHAR, but you compared a number:
+SELECT * FROM users WHERE phone = 9876543210;   -- ❌
+SELECT * FROM users WHERE phone = '9876543210'; -- ✅
+```
+
+Comparing a string column to a number forces the database to convert the *column* value row by row (in MySQL, string-to-number conversion happens on the column side) — and a converted column can't use its index. The fix is embarrassingly small: quote the literal so the types match.
+
+### Reading EXPLAIN — the 30-second version
+
+`EXPLAIN SELECT ...` shows *how* the database plans to run your query. Four fields carry most of the information:
+
+```sql
+EXPLAIN SELECT name FROM employees WHERE dept_id = 10;
+```
+
+| Field | What to check |
+|---|---|
+| `type` | Access method. From best to worst: `const` → `eq_ref` → `ref` → `range` → `index` → `ALL`. **`ALL` = full table scan** — the red flag. `ref`/`range` = index is being used. |
+| `key` | Which index was actually chosen (`NULL` = none). |
+| `rows` | Estimated rows examined per step. Watch this number drop after a fix. |
+| `Extra` | `Using index` = covering index (good). `Using filesort` = extra sort pass. `Using temporary` = temp table for grouping (often worth a look). |
+
+```text
+-- Before:  type: ALL,  key: NULL,        rows: 500000
+-- After:   type: ref,  key: idx_dept_id, rows: 42
+```
+
+That before/after pair *is* the answer to "how did you optimise it?" — you made `type` leave `ALL` and `rows` collapse.
+
+> [!WARNING]
+> **`EXPLAIN` shows estimates, not a stopwatch.** The optimiser guesses row counts from statistics; stale statistics can mean bad plans. Judge the fix by both the plan *and* the actual runtime.
+
+### Putting it together — a 3-minute drill
+
+Watch the five reasons work in sequence on one table. `employees(id, name, dept_id, salary, join_date, is_active)`, ~500,000 rows, indexes on `id` (PK) and `join_date`.
+
+```sql
+EXPLAIN SELECT name FROM employees
+WHERE is_active = 1 AND YEAR(join_date) = 2026;
+```
+
+```text
+type: ALL, key: NULL, rows: 500000, Extra: Using where
+```
+
+Two reasons are stacked: `YEAR()` hides the `join_date` index (reason 3), and `is_active = 1` matches 95% of rows so it wouldn't help anyway (reason 1). Peel them off one at a time:
+
+```sql
+-- Fix the function first (reason 3), keep the low-selectivity flag:
+EXPLAIN SELECT name FROM employees
+WHERE is_active = 1
+  AND join_date >= '2026-01-01' AND join_date < '2027-01-01';
+-- type: range, key: idx on join_date, rows: ~40,000 — the range now seeks.
+```
+
+```sql
+-- Now check selectivity (reason 1): how many rows does each side really cut?
+SELECT COUNT(*) FROM employees WHERE is_active = 1;                    -- ~475,000 (useless alone)
+SELECT COUNT(*) FROM employees
+WHERE join_date >= '2026-01-01' AND join_date < '2027-01-01';          -- ~40,000 (the real filter)
+```
+
+The lesson to say out loud: *"I fix function-wrapped columns by rewriting to ranges, and I check selectivity with a quick COUNT before blaming the index — sometimes the optimiser is right and the condition is just weak."*
+
+### Quick-fire checks to run before blaming the database
+
+| Check | Command / question |
+|---|---|
+| Is the index really there? | `SHOW INDEX FROM employees;` |
+| Did the optimiser pick it? | `EXPLAIN ...` → is `key` NULL? |
+| How selective is my filter? | `SELECT COUNT(*) ... WHERE <condition>` vs total rows |
+| Is a function wrapping the column? | Scan the WHERE for `YEAR(`, `LOWER(`, `DATE(`, arithmetic on the column |
+| Do the types match? | VARCHAR column vs unquoted number literal |
+
+> [!NOTE]
+> **One-line interview answer:** "An index gets ignored when it doesn't help — low selectivity, a missing leftmost column, a function wrapped around the column, a leading-wildcard LIKE, or a type mismatch that forces conversion. I confirm with EXPLAIN: `type: ALL` with `key: NULL` means the scan is real."
+
+> [!NOTE]
+> **30-second interview answer:** "First I check selectivity — an index matching 95% of rows is worse than a scan, so the optimiser ignoring it can be correct. Then the usual suspects: for composite indexes the leftmost column must be present; wrapping the column in a function like `YEAR(join_date)` makes the sorted index unusable, so I rewrite to a bare-column range; `LIKE '%x'` can't use a left-to-right B-tree; and comparing a VARCHAR column to a number forces per-row conversion. I read EXPLAIN for `type` (ALL is the red flag), `key`, estimated `rows`, and `Extra`."
+
+## 🔒 12. Transactions & Locks in Practice
+
+Chapter 6B covered ACID — the promises. This chapter is what those promises look like when *two* transactions run at the same time and start stepping on each other.
+
+### Isolation levels — pick your poison
+
+The weaker the isolation, the faster the system runs — and the stranger the things you can see mid-flight. Three classic anomalies:
+
+- **Dirty read** — you read a value another transaction wrote but hasn't committed yet. It might roll back. You read a ghost.
+- **Non-repeatable read** — you read the same row twice in one transaction and get *different* values, because someone committed an update in between.
+- **Phantom read** — you run the same *range* query twice and a new row appears (someone inserted a row matching your WHERE). The row wasn't changed — it *arrived*.
+
+| Isolation level | Dirty read | Non-repeatable read | Phantom read |
+|---|---|---|---|
+| READ UNCOMMITTED | ❌ possible | ❌ possible | ❌ possible |
+| READ COMMITTED | ✅ prevented | ❌ possible | ❌ possible |
+| REPEATABLE READ | ✅ prevented | ✅ prevented | mostly prevented* |
+| SERIALIZABLE | ✅ prevented | ✅ prevented | ✅ prevented |
+
+*MySQL's REPEATABLE READ also blocks phantoms in most real cases using gap locks — a detail worth mentioning, not memorising.
+
+Defaults worth knowing: MySQL/InnoDB defaults to **REPEATABLE READ**; PostgreSQL defaults to **READ COMMITTED**. SERIALIZABLE is the safest and the slowest — transactions effectively queue up.
+
+🎤 What the interviewer actually asks: "What isolation level would you use for a bank balance read inside a transfer?" — High enough that the balance can't change under you mid-transaction (REPEATABLE READ or SERIALIZABLE), and say *why*: you can't afford a non-repeatable read between checking and debiting.
+
+### SELECT ... FOR UPDATE — "this row is mine for now"
+
+Reading a row normally doesn't stop anyone else. `FOR UPDATE` takes a write lock on the rows you read, so the next transaction that wants them *waits* until you commit or roll back.
+
+```sql
+BEGIN;
+-- Lock the account row while we check and debit it
+SELECT balance FROM accounts WHERE id = 'A' FOR UPDATE;
+-- balance is 2000; nobody else can update this row until we finish
+UPDATE accounts SET balance = balance - 500 WHERE id = 'A';
+COMMIT;  -- lock released here
+```
+
+The pattern is "read it locked, decide, update, commit" — it closes the gap where two transfers both read ₹2,000 and both happily debit. Use it inside a transaction, on as few rows as possible, and keep the transaction short: every millisecond you hold a lock, someone else is standing in a queue.
+
+> [!WARNING]
+> **`FOR UPDATE` outside a transaction does nothing useful** — with autocommit on, the lock is released the instant the SELECT finishes. And a vague `WHERE` (or no index on it) can lock far more rows than you intended — in the worst case, effectively the table. Lock narrow, commit fast.
+
+### Lock waits — the traffic jam
+
+If transaction T1 holds a lock and T2 asks for the same row, T2 *waits*. Waits chain: T2 holds row X while waiting for T1's row Y, and now T3 waits behind T2. The database will eventually time out a waiter (`lock wait timeout`) rather than wait forever — the user sees a slow-then-failed request, not a hang. The usual real-world causes: a long transaction holding locks (a report query inside a transaction, a developer's forgotten `BEGIN`), or an update with no index scanning and locking half the table.
+
+### Deadlocks — the circular wait
+
+A deadlock is a wait that can *never* resolve:
+
+1. T1 locks account A, then reaches for account B.
+2. At the same moment, T2 locks account B, then reaches for account A.
+3. T1 waits for T2. T2 waits for T1. Neither can ever move.
+
+```text
+T1:  lock A ──► waits for B
+                ▲          │
+                └──────────┘
+T2:  lock B ──► waits for A
+```
+
+The good news: databases detect this. InnoDB spots the cycle, picks one transaction as the victim, and rolls it back with a deadlock error. The application should **catch that error and retry the whole transaction** — a deadlock is normal under load, not a five-alarm fire.
+
+Prevention beats detection:
+
+| Habit | Why it works |
+|---|---|
+| Always lock rows in the **same order** (e.g. by id ASC) | Cycles need opposite orders; one global order makes circles impossible |
+| Keep transactions short | Less time holding locks = smaller collision window |
+| Touch fewer rows (use indexes) | Fewer locks held, fewer chances to collide |
+| Retry on deadlock error | The database already picked a victim; just rerun that transaction |
+
+### A lock-wait story — the forgotten BEGIN
+
+A developer opens a MySQL session at 11:00, runs `BEGIN`, updates one account row… and goes to lunch. Autocommit is off, so the row lock just sits there. At 11:20 the payment service tries to debit that same account:
+
+1. Payment transaction runs `SELECT ... FOR UPDATE` on the account → **waits**.
+2. Its connection pool slowly fills with more waiting requests for the same hot rows.
+3. After the lock-wait timeout (often ~50 s), requests start failing with a timeout error.
+4. The fix is embarrassingly human: the developer commits at 12:05 and the "outage" evaporates.
+
+Say the lesson plainly: *"Most lock waits I have seen are not exotic — they are a long or forgotten transaction holding locks. That's why I keep transactions short and never leave one open across a user think-time or an API call."*
+
+### FOR UPDATE variants worth one sentence each
+
+| Clause | Behaviour |
+|---|---|
+| `SELECT ... FOR UPDATE` | Lock matching rows for update; others wait |
+| `SELECT ... FOR SHARE` (MySQL 8) / `LOCK IN SHARE MODE` | Shared lock — others may read-lock too, nobody may write |
+| `... FOR UPDATE NOWAIT` | Error immediately instead of queueing if locked |
+| `... FOR UPDATE SKIP LOCKED` | Skip locked rows entirely — perfect for job-queue workers |
+
+`SKIP LOCKED` is the modern queue pattern: ten workers each grab the next *unlocked* pending job row, process it, and mark it done — no queue table drama, no two workers ever fighting over the same row:
+
+```sql
+BEGIN;
+SELECT id, payload FROM jobs
+WHERE status = 'pending'
+ORDER BY id
+LIMIT 1
+FOR UPDATE SKIP LOCKED;
+-- process the job…
+UPDATE jobs SET status = 'done' WHERE id = ?;
+COMMIT;
+```
+
+> [!TIP]
+> If an interviewer asks "how do multiple workers safely pull from a jobs table?", `FOR UPDATE SKIP LOCKED` is the answer that sounds like you have actually built one.
+
+> [!WARNING]
+> **The gap-lock surprise:** under MySQL's default REPEATABLE READ, a range `SELECT ... FOR UPDATE` can also lock the *gaps* between rows — so another transaction can't even INSERT a new row inside your range, not just update existing ones. It's phantom protection doing its job, but it widens what you hold. If a "can't insert" mystery appears under load, this is the first suspect to name.
+
+> [!NOTE]
+> **One-line interview answer:** "Isolation levels trade speed for safety — weaker levels allow dirty, non-repeatable, and phantom reads. `SELECT ... FOR UPDATE` locks rows until commit, and deadlocks are circular lock waits the database breaks by rolling back one transaction; consistent lock ordering prevents them."
+
+> [!NOTE]
+> **30-second interview answer:** "Dirty reads see uncommitted data, non-repeatable reads see a row change between two reads, and phantom reads see new rows appear in a range — READ COMMITTED blocks only the first, REPEATABLE READ blocks the first two, SERIALIZABLE blocks all three at the cost of speed. For check-then-update flows I read with `SELECT ... FOR UPDATE` inside a short transaction to lock just those rows. Deadlocks happen when two transactions lock rows in opposite orders; the database detects the cycle and rolls one back, so the app retries — and locking in a consistent order stops it forming at all."
+
+## 🐌 13. Fixing a Slow Query, Step by Step
+
+Theory is done. Here's one realistic rescue, narrated in the order you'd actually do it — this doubles as your template for the interview question *"Tell me about a slow query you fixed."*
+
+### The report that took 6 seconds
+
+A support dashboard runs this every page load. `orders` has ~500,000 rows, `customers` ~80,000.
+
+```sql
+-- ❌ The slow version
+SELECT *
+FROM orders o
+JOIN customers c ON c.id = o.customer_id
+WHERE YEAR(o.order_date) = 2026
+  AND LOWER(c.city) = 'delhi'
+ORDER BY o.order_date DESC;
+```
+
+It returns ~40,000 rows and takes 6 seconds. Let's fix it in stages.
+
+### Step 1 — Measure: EXPLAIN before touching anything
+
+```sql
+EXPLAIN SELECT * FROM orders o
+JOIN customers c ON c.id = o.customer_id
+WHERE YEAR(o.order_date) = 2026 AND LOWER(c.city) = 'delhi'
+ORDER BY o.order_date DESC;
+```
+
+```text
+orders:    type: ALL,  key: NULL, rows: 500000, Extra: Using filesort
+customers: type: eq_ref, key: PRIMARY, rows: 1
+```
+
+Diagnosis in plain words: `orders` gets a **full table scan** (`type: ALL`), then a **filesort** to order half a million rows — because `YEAR(order_date)` makes any date index invisible, exactly the chapter-11 trap. The join itself is fine (`eq_ref` on the primary key).
+
+### Step 2 — Rewrite: bare columns, real ranges
+
+```sql
+SELECT *
+FROM orders o
+JOIN customers c ON c.id = o.customer_id
+WHERE o.order_date >= '2026-01-01' AND o.order_date < '2027-01-01'
+  AND c.city = 'Delhi'
+ORDER BY o.order_date DESC;
+```
+
+Two changes, both from chapter 11: the function came off `order_date` (now a plain range the index can seek into), and `LOWER(c.city)` became a direct comparison — store city consistently, or compare against the stored form. City data should be cleaned once at write time, not lowered per-row per-query forever.
+
+### Step 3 — Index what the query actually does
+
+The query filters `orders` by date range and sorts by the same column. One index serves both:
+
+```sql
+CREATE INDEX idx_orders_date ON orders(order_date);
+CREATE INDEX idx_customers_city ON customers(city);
+```
+
+Re-run EXPLAIN:
+
+```text
+orders:    type: range, key: idx_orders_date, rows: 62000, Extra: (no filesort!)
+customers: type: eq_ref, key: PRIMARY, rows: 1
+```
+
+`type` moved from `ALL` to `range`, rows examined fell from 500,000 to ~62,000, and the filesort vanished — rows now come out of the index already in date order. **~900 ms.** Better. Keep going.
+
+### Step 4 — Stop fetching what you don't show
+
+`SELECT *` drags every column of both tables across the wire — including a `notes` blob nobody renders. The dashboard shows six fields. Ask for six fields:
+
+```sql
+SELECT o.id, o.amount, o.order_date, c.name, c.city, c.email
+FROM orders o
+JOIN customers c ON c.id = o.customer_id
+WHERE o.order_date >= '2026-01-01' AND o.order_date < '2027-01-01'
+  AND c.city = 'Delhi'
+ORDER BY o.order_date DESC;
+```
+
+### Step 5 — Cover the query so it never touches the table
+
+If the index itself contains every column the query needs from `orders`, the database answers from the index alone (`Extra: Using index`) and never fetches full rows:
+
+```sql
+-- Drop the old one; this wider index covers filter + sort + selected columns
+DROP INDEX idx_orders_date ON orders;
+CREATE INDEX idx_orders_cover ON orders(order_date, customer_id, amount);
+```
+
+```text
+orders: type: range, key: idx_orders_cover, rows: 62000, Extra: Using index
+```
+
+**~120 ms.** One last honest question: does a dashboard need all 40,000 rows on screen? Add pagination (`LIMIT 50`) and you're at **~15 ms**. Knowing when *not* to fetch is also optimisation.
+
+### The before/after story
+
+| Stage | Change | Time | EXPLAIN signal |
+|---|---|---|---|
+| Original | `YEAR()` + `LOWER()` + `SELECT *` | 6,000 ms | `type: ALL`, filesort, 500k rows |
+| Rewrite | Range on bare column, clean comparison | 3,800 ms | Still `ALL` — no usable index yet |
+| Index | `idx_orders_date`, `idx_customers_city` | 900 ms | `type: range`, no filesort, 62k rows |
+| Slim select | Only the 6 displayed columns | 400 ms | Less data moved per row |
+| Covering index | `(order_date, customer_id, amount)` | 120 ms | `Extra: Using index` |
+| Paginate | `LIMIT 50` | ~15 ms | Same plan, 50 rows returned |
+
+> [!TIP]
+> **Say the sequence out loud in interviews:** "EXPLAIN first — I found `type: ALL` with a filesort. The `YEAR()` wrapper was hiding the index, so I rewrote it as a date range, added an index on the filtered/sorted column, trimmed `SELECT *` to the displayed columns, and made it a covering index. Six seconds became ~120 ms, ~15 ms paginated." Diagnosis → evidence → fix → numbers. That's the whole genre.
+
+> [!WARNING]
+> **Don't index blind.** Each new index slows every insert into `orders`. On a write-heavy table, the covering index in step 5 is a deliberate trade — name it as one: "we paid a little write cost for a dashboard that runs 50× a day."
+
+### What if it's still slow after all that?
+
+Work the list in order — each step is cheaper to try than the next:
+
+1. **Wrong rows estimated?** If EXPLAIN's `rows` is wildly off from reality, statistics may be stale — refresh them (`ANALYZE TABLE orders;`).
+2. **Sorting a big result?** An `ORDER BY` on a column pair like `(city, order_date)` may want a composite index in exactly that order instead of filesorting.
+3. **The join column types differ?** `orders.customer_id` as INT joining `customers.id` as BIGINT (or a string id) can force conversions per row — chapter 11's trap, join edition.
+4. **Deep pagination?** `LIMIT 50 OFFSET 200000` reads and discards 200k rows. Keyset pagination (`WHERE id > last_seen_id ORDER BY id LIMIT 50`) stays fast at any depth.
+5. **Still seconds?** The honest senior answer: precompute. A nightly summary table or a cache for a dashboard that tolerates slightly stale numbers beats heroic per-request SQL.
+
+> [!NOTE]
+> **30-second interview answer:** "I never guess — I run EXPLAIN and look for `type: ALL`. In this report, `YEAR(order_date)` defeated the date index and `SELECT *` dragged unused columns, so I rewrote the filter as a bare-column range, indexed `order_date`, selected only the displayed columns, and extended the index into a covering index until EXPLAIN showed `type: range` with `Using index`. Six seconds dropped to about 120 ms — and pagination took it to ~15 ms. The method is always: measure, rewrite, index, re-measure."
+
+## 🏋️ 14. Hard Practice Set
+
+Ten interview-grade queries. Same schema family as the 18 Practice Queries, harder teeth. Say each answer aloud before opening the solution.
+
+`employees(id, name, dept_id, salary, manager_id)` · `departments(id, dept_name)` · `orders(id, employee_id, amount, order_date)` · `logins(user_id, login_date)`
+
+**Q1. Third-highest distinct salary in each department.**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+SELECT dept_id, salary
+FROM (
+  SELECT dept_id, salary,
+         DENSE_RANK() OVER (PARTITION BY dept_id ORDER BY salary DESC) AS dr
+  FROM (SELECT DISTINCT dept_id, salary FROM employees) s
+) ranked
+WHERE dr = 3;
+```
+
+Note the inner `DISTINCT` — ranking raw rows would count two people on the same salary as ranks 1 and 2. `DENSE_RANK` over distinct salaries asks the question that was actually meant: the third salary *level*.
+
+</details>
+
+**Q2. Employees who logged in on 3 or more consecutive days (streak detection).**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+SELECT DISTINCT user_id
+FROM (
+  SELECT user_id, login_date,
+         DATE_SUB(login_date, INTERVAL
+           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY login_date) DAY
+         ) AS streak_group
+  FROM (SELECT DISTINCT user_id, login_date FROM logins) d
+) g
+GROUP BY user_id, streak_group
+HAVING COUNT(*) >= 3;
+```
+
+The trick: subtract the row number (in days) from the date. Consecutive dates collapse to the *same* `streak_group` value; a gap breaks it. Group, count, keep streaks of 3+.
+
+</details>
+
+**Q3. Median salary of all employees.**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+SELECT AVG(salary) AS median_salary
+FROM (
+  SELECT salary,
+         ROW_NUMBER() OVER (ORDER BY salary) AS rn,
+         COUNT(*) OVER () AS total
+  FROM employees
+) ranked
+WHERE rn IN (FLOOR((total + 1) / 2), FLOOR((total + 2) / 2));
+```
+
+Number every salary in order, then pick the middle row (odd count) or average the two middle rows (even count). The two `FLOOR` expressions elegantly return the same row twice when the count is odd.
+
+</details>
+
+**Q4. Monthly order counts pivoted — one column per month (Jan, Feb, Mar) for 2026.**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+SELECT
+  COUNT(CASE WHEN MONTH(order_date) = 1 THEN 1 END) AS jan,
+  COUNT(CASE WHEN MONTH(order_date) = 2 THEN 1 END) AS feb,
+  COUNT(CASE WHEN MONTH(order_date) = 3 THEN 1 END) AS mar
+FROM orders
+WHERE order_date >= '2026-01-01' AND order_date < '2026-04-01';
+```
+
+SQL has no real `PIVOT` in MySQL — the interview-grade idiom is conditional aggregation: a `CASE` that only "fires" for its month, wrapped in `COUNT`/`SUM`.
+
+</details>
+
+**Q5. Employees earning above their department's median salary.**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+WITH dept_median AS (
+  SELECT dept_id, AVG(salary) AS median_salary
+  FROM (
+    SELECT dept_id, salary,
+           ROW_NUMBER() OVER (PARTITION BY dept_id ORDER BY salary) AS rn,
+           COUNT(*) OVER (PARTITION BY dept_id) AS total
+    FROM employees
+  ) r
+  WHERE rn IN (FLOOR((total + 1) / 2), FLOOR((total + 2) / 2))
+  GROUP BY dept_id
+)
+SELECT e.name, e.dept_id, e.salary, m.median_salary
+FROM employees e
+JOIN dept_median m ON m.dept_id = e.dept_id
+WHERE e.salary > m.median_salary
+ORDER BY e.dept_id, e.salary DESC;
+```
+
+Q3's median trick, once per department via `PARTITION BY`, packaged in a CTE (chapter 10) and joined back. Three chapters in one query — say so in the interview.
+
+</details>
+
+**Q6. Running total of order amounts, restarting every month.**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+SELECT id, order_date, amount,
+  SUM(amount) OVER (
+    PARTITION BY DATE_FORMAT(order_date, '%Y-%m')
+    ORDER BY order_date, id
+    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+  ) AS running_total_this_month
+FROM orders
+ORDER BY order_date, id;
+```
+
+`PARTITION BY` the month expression and the running total resets on the 1st (chapter 9). Ties on `order_date` are broken by `id` so the total is deterministic.
+
+</details>
+
+**Q7. Top 2 earners per department, ties included.**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+SELECT d.dept_name, e.name, e.salary
+FROM (
+  SELECT dept_id, name, salary,
+         RANK() OVER (PARTITION BY dept_id ORDER BY salary DESC) AS rnk
+  FROM employees
+) e
+JOIN departments d ON d.id = e.dept_id
+WHERE e.rnk <= 2
+ORDER BY d.dept_name, e.salary DESC;
+```
+
+`RANK`, not `ROW_NUMBER`: if two people tie for 2nd, both appear (chapter 6C's table is the whole explanation). If the interviewer wants *exactly* two people, swap in `ROW_NUMBER` and name the trade-off.
+
+</details>
+
+**Q8. Departments where the highest salary is at least double the lowest.**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+SELECT d.dept_name, MIN(e.salary) AS lowest, MAX(e.salary) AS highest
+FROM employees e
+JOIN departments d ON d.id = e.dept_id
+GROUP BY d.dept_name
+HAVING MAX(e.salary) >= 2 * MIN(e.salary)
+ORDER BY highest DESC;
+```
+
+Aggregate conditions live in `HAVING`, not `WHERE` (chapter 4) — both halves of the comparison are aggregates, so this is its natural home.
+
+</details>
+
+**Q9. Month-over-month revenue change, showing only months that grew.**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+WITH monthly AS (
+  SELECT DATE_FORMAT(order_date, '%Y-%m') AS month, SUM(amount) AS revenue
+  FROM orders
+  GROUP BY DATE_FORMAT(order_date, '%Y-%m')
+),
+with_prev AS (
+  SELECT month, revenue,
+         LAG(revenue) OVER (ORDER BY month) AS prev_revenue
+  FROM monthly
+)
+SELECT month, revenue, prev_revenue,
+       ROUND(100.0 * (revenue - prev_revenue) / prev_revenue, 1) AS growth_pct
+FROM with_prev
+WHERE prev_revenue IS NOT NULL AND revenue > prev_revenue
+ORDER BY month;
+```
+
+Filtering on a window result can't happen in the same `WHERE` (chapter 6C), so `LAG` is computed in a CTE and filtered outside — the pipeline pattern from chapter 10 doing quiet work.
+
+</details>
+
+**Q10. Employees who earn more than every employee in department 20.**
+<details>
+<summary>💡 Solution</summary>
+
+```sql
+SELECT name, dept_id, salary
+FROM employees
+WHERE salary > (SELECT MAX(salary) FROM employees WHERE dept_id = 20)
+ORDER BY salary DESC;
+```
+
+"Earn more than *every* X" always means "more than the MAX of X". (Standard SQL also spells it `> ALL (SELECT ...)`, which MySQL supports — the MAX version is the one interviewers reliably accept on a whiteboard.)
+
+</details>
+
+> [!TIP]
+> **The meta-lesson of this set:** Q1, Q3, Q5, Q6, Q7, Q9 are all window functions wearing different costumes, and Q2 is a window function plus one clever subtraction. If you truly own chapters 6C and 9, most "hard SQL round" questions unfold into patterns you have already written.
+
+> [!NOTE]
+> **30-second interview answer:** "For hard SQL rounds I reach for a small kit: `DENSE_RANK` over distinct values for nth-highest-per-group, the row-number-minus-date trick to group consecutive-day streaks, `ROW_NUMBER` plus `COUNT(*) OVER ()` to pick median rows, conditional aggregation (`COUNT(CASE WHEN ...)`) to pivot, and window results wrapped in a CTE whenever I need to filter on them. Every one of those is a pattern, not a puzzle — recognise the shape, and the query writes itself."

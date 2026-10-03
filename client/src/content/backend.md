@@ -811,3 +811,302 @@ Status codes are grouped by first digit: **2xx** = success, **4xx** = client's m
 
 > [!NOTE]
 > 📚 **By Ayushi Singh** — part of the *Full-Stack Interview Notes* series. If these notes helped you, star the repo and share it with a friend who's also preparing. Good luck with your interview — you've got this! 🚀
+
+
+---
+
+## 📌 13. API Design Deep Dive — Versioning, Pagination & Filtering
+
+Section 5 taught the conventions. This chapter is the engineering layer real teams judge: how APIs survive growing users, big lists, and version two.
+
+### Versioning — changing the API without breaking old apps
+
+Mobile apps and other teams' frontends pin themselves to your API's current shape. When you must change it, version it — most commonly in the URL:
+
+```bash
+GET /api/v1/bills      # old clients keep working
+GET /api/v2/bills      # new shape/behaviour lives here
+```
+
+The fresher version: add new fields freely (old clients ignore them), but renaming or removing a field is a breaking change — that earns a new version. (Header-based versioning exists; URL versioning is the one to describe.)
+
+### Pagination — never return "everything"
+
+A list endpoint that returns all 50,000 users will die in production. Two standard shapes:
+
+**Offset pagination** (simple; fits most fresher apps):
+
+```bash
+GET /products?page=2&limit=20        # skip 20, take 20
+```
+
+```js
+const page = Math.max(1, Number(req.query.page) || 1);
+const limit = Math.min(50, Number(req.query.limit) || 10);   // cap it!
+const skip = (page - 1) * limit;
+const items = await Product.find().skip(skip).limit(limit);
+const total = await Product.countDocuments();
+res.json({ items, page, totalPages: Math.ceil(total / limit) });
+```
+
+Weakness worth naming: if rows are inserted while someone pages through, items can repeat or vanish between pages, and deep pages get slow (the database still scans the skipped rows).
+
+**Cursor pagination** (what big feeds use): the response hands back an opaque cursor pointing at the last item seen — `GET /feed?cursor=abc123&limit=20` — and the server returns "the 20 after this." No skipped-row cost, immune to inserts shifting pages. Say: *"offset for admin tables and simple lists; cursor for infinite feeds and very large collections."*
+
+### Filtering, sorting, searching — all in the query string
+
+```bash
+GET /products?category=shoes&minPrice=500&sort=-price&q=running
+```
+
+| Param | Meaning | Shape in code |
+|---|---|---|
+| `category=shoes` | Exact-match filter | `filter.category = "shoes"` |
+| `minPrice=500` | Range filter | `filter.price = { $gte: 500 }` |
+| `sort=-price` | Descending by price (`-` prefix) | `.sort("-price")` |
+| `q=running` | Text search | A `$regex` / text index over name |
+
+Build the filter object only from **whitelisted** params — never pour `req.query` straight into a database query (that's an injection hole; see Section 17).
+
+### One consistent response shape
+
+The professional touch: success and error bodies always look the same across the whole API, so the frontend can be written once.
+
+```js
+// ✅ envelope — same keys every time, plus a request-friendly error shape
+res.status(200).json({ success: true, data: items, page, totalPages });
+res.status(400).json({ success: false, error: { code: "VALIDATION_ERROR", message: "Email is required", field: "email" } });
+```
+
+> [!WARNING]
+> **The limit trap:** accept a `limit` from the client but always cap it server-side (`Math.min(50, ...)`) — otherwise `?limit=1000000` is a one-line denial-of-service against your own database.
+
+> [!NOTE]
+> **30-second interview answer:** "I version APIs in the URL so old clients keep working while v2 evolves. List endpoints always paginate — offset pagination with page/limit for simple lists, cursor pagination for large feeds — with the page size capped server-side. Filters, sorting, and search go in the query string, and I whitelist the parameters before they touch the database. Every response uses one consistent success/error envelope."
+
+
+
+---
+
+## 📌 14. Auth Deep Dive — Sessions, Refresh Tokens & Token Rotation
+
+Section 7 built login with JWT. This chapter answers the follow-up every company asks: *"JWT or sessions — and how do you handle expiry and logout, really?"*
+
+### Sessions vs JWT — the same job, two storage choices
+
+Both answer "who is calling?" after login. They differ in **where the truth lives**:
+
+| | Session-based | JWT-based |
+|---|---|---|
+| What the client holds | A random **session ID** (usually a cookie) | The **signed token itself** |
+| Where the data lives | On the **server** (memory/DB/Redis) | **Inside the token** (id, role, expiry) |
+| Each request | Server looks the ID up in its store | Server only checks signature + expiry — no lookup |
+| Logout/revoke | ✅ Easy — delete the server record | ❌ Hard — token stays valid until expiry |
+| Scaling | Needs a shared store once you run multiple servers | ✅ Naturally stateless |
+
+The mature answer: JWT's statelessness scales beautifully and suits APIs/mobile apps; sessions give instant revocation and suit classic server-rendered apps. Neither is "more secure" in the abstract — the details below are where security is won or lost.
+
+### The two-token pattern: short access + refresh
+
+A JWT that lives for 30 days is a stolen-forever key; one that lives for 10 minutes logs users out mid-work. The standard compromise:
+
+- **Access token** — the JWT from Section 7, short-lived (5–15 min), sent with every request.
+- **Refresh token** — long-lived (days/weeks), sent **only** to one endpoint: `POST /auth/refresh`. It lives in an httpOnly cookie (JS can't read it → XSS can't steal it), and when presented, the server issues a fresh access token.
+
+Expiry pain disappears (the app silently refreshes), and the damage window of a stolen access token stays small.
+
+### Refresh token rotation — catching theft
+
+Rotation upgrades this: **every refresh issues a new refresh token and kills the old one**, and the server remembers which refresh tokens belong to which user ("family"). If an *old* refresh token is ever presented again, somebody replayed a stolen copy — the server nukes the whole family and forces a real login. That theft-detection sentence scores heavily: *"I rotate refresh tokens on every use; reuse of an old one tells me it's stolen, so I revoke the whole chain."*
+
+### The password layer — hashing, upgraded
+
+Section 7 used bcrypt. The deeper facts:
+
+- Hashing must be **slow on purpose** (bcrypt/scrypt/argon2) — attackers try billions of guesses, so each guess should cost real time. Fast hashes like SHA-256 are *wrong for passwords* precisely because they're fast.
+- The **cost factor** (bcrypt rounds) is tuned so one check takes ~100–250ms — invisible at login, devastating to brute force.
+- **Pepper** (a secret mixed in from the environment, never stored with the hashes) is the optional extra layer worth naming.
+
+And the flows around it: password-reset tokens are single-use, short-lived, and stored hashed — exactly like refresh tokens, because a reset link *is* a temporary password.
+
+> [!WARNING]
+> **Three traps:** (1) "I'll store the JWT in localStorage" — readable by any script on the page; if the app has an XSS hole, tokens walk away. httpOnly cookies for refresh tokens is the defensive default. (2) Rolling your own crypto or token signing — always the vetted library. (3) Checking permissions only on the frontend (hiding the Delete button) — attackers call the API directly; authorization belongs in middleware, every route, every time.
+
+> [!NOTE]
+> **30-second interview answer:** "Sessions keep the state on the server and revoke instantly; JWTs carry signed claims so the server stays stateless but can't easily revoke. In practice I use a short-lived JWT access token plus a long-lived refresh token in an httpOnly cookie, rotated on every refresh — so a replayed old refresh token exposes theft and I can revoke the whole chain. Passwords are hashed with a deliberately slow algorithm like bcrypt with a tuned cost factor."
+
+
+
+---
+
+## 📌 15. MongoDB Schema Design — Indexes & Data Modelling Calls
+
+Section 8 showed embed vs reference on one example. This chapter adds the rest of the craft: how the database *finds* documents fast, and the modelling calls you'll be judged on.
+
+### Indexes — the book's table of contents
+
+Without an index, MongoDB answers a query by **reading every document** (a collection scan). With an index on `email`, it jumps straight to matches — the same reason you don't read a whole textbook to find "photosynthesis."
+
+```js
+userSchema.index({ email: 1 });            // index on one field (1 = ascending)
+userSchema.index({ city: 1, age: -1 });    // compound: city asc, then age desc
+```
+
+Facts that answer the follow-ups:
+
+- Every collection already has an index on `_id`. `unique: true` (Section 8's email) *is* an index plus a duplicate-reject rule.
+- Indexes cost: storage, and every insert/update must also update each index. Index what you query by; don't index everything "just in case."
+- A query can only ride an index efficiently when the index's fields lead with what you filter on — `{ city: 1, age: -1 }` serves `find({ city })` and `find({ city, age })`, not `find({ age })` alone.
+- `explain()` on a query shows whether it used an index (`IXSCAN`) or scanned everything (`COLLSCAN`) — the first tool to reach for when an endpoint is slow.
+
+### The modelling calls, as decisions
+
+| Situation | Call | Why |
+|---|---|---|
+| Profile info always shown with the user (address, preferences) | **Embed** | One fetch, read together, small and stable |
+| Orders, comments, notifications | **Reference** | Grows forever, queried on its own, would balloon the document |
+| A product's snapshot inside an order (name+price at purchase time) | **Embed a copy** | Must not change when the product is edited later — history shouldn't rewrite itself |
+| Tags on a post (small, bounded) | **Embed array** | Few items, always read with the post |
+| Students ↔ courses (both sides grow) | **Reference both ways** (join collection) | Many-to-many never fits inside either document |
+
+The honest rule behind the table: **model for how the data is read, not how it is related on paper.** Document databases reward designing around your queries.
+
+### The 16MB wall and unbounded arrays
+
+A MongoDB document maxes out at 16MB — generous, until an embedded array grows without limit (comments, logs, messages inside one document): writes get slower, the document gets moved as it grows, and one day a write simply fails. "Can this list grow forever?" (Section 8's question) is really asking about this wall — unbounded growth always becomes a separate collection with a reference back.
+
+### Two essentials to name
+
+- **Aggregation pipeline** — MongoDB's filter/group/report engine, as stages: `$match` (filter) → `$group` (sum/count by field) → `$sort`. It's the NoSQL answer to SQL's `GROUP BY`, and "monthly totals" in a fresher project is built exactly like this.
+- **Transactions** — MongoDB supports multi-document transactions, but they're the exception to reach for (money moving between two accounts), not the default; single-document writes are already atomic, which is one more reason embedding related-must-change-together data is attractive.
+
+```js
+// The monthly-totals shape — $match, then $group, then $sort
+await Order.aggregate([
+  { $match: { status: "paid" } },
+  { $group: { _id: "$month", total: { $sum: "$amount" } } },
+  { $sort: { _id: 1 } },
+]);
+```
+
+> [!WARNING]
+> **The classic trap:** designing MongoDB schemas exactly like SQL tables — a document per table-row, references everywhere — then paying for it with multi-query pages and manual stitching. Embed what's read together; MongoDB's whole point is shaped-for-the-query documents.
+
+> [!NOTE]
+> **30-second interview answer:** "Indexes make queries jump to matches instead of scanning every document — I index the fields I filter on and check with explain() whether a query is using one. For modelling, I embed data that's small, stable, and always read with its parent, and reference anything unbounded or independently queried — because one document caps at 16MB. Aggregation pipelines with $match, $group, and $sort handle reporting, and transactions exist but single-document writes are already atomic."
+
+
+
+---
+
+## 📌 16. Caching with Redis — Intuition & Cache-Aside
+
+Your database is disk-and-network slow. A **cache** is a small, very fast storage layer in front of it: "we just answered this — keep the answer nearby for a while." Redis is the industry-standard cache: an in-memory key-value store that answers in well under a millisecond.
+
+### Cache-aside — the pattern you'll actually implement
+
+The application manages the cache by hand, in four steps:
+
+```js
+app.get("/products/:id", async (req, res) => {
+  const key = `product:${req.params.id}`;
+
+  const cached = await redis.get(key);            // 1. Ask the cache first
+  if (cached) return res.json(JSON.parse(cached)); // 2. Hit → return, database untouched
+
+  const product = await Product.findById(req.params.id);   // 3. Miss → go to the database
+  if (!product) return res.status(404).json({ message: "Not found" });
+
+  await redis.set(key, JSON.stringify(product), "EX", 300); // 4. Fill the cache (expire in 5 min)
+  res.json(product);
+});
+```
+
+Hit = fast. Miss = normal cost, once, then fast for everyone after. Cache-aside is honest about its contract: **the cache is a copy, never the source of truth** — losing Redis entirely must slow the app down, not break it.
+
+### TTL — every cached answer is a promise with an expiry
+
+`EX 300` above means the entry dies after 300 seconds. Choosing the TTL is the whole judgement call:
+
+- Prices that change rarely, product details → minutes to hours.
+- Anything users perceive as "live" (stock left, scores) → seconds, or don't cache at all.
+- User-specific data → cache per user key (`user:42:profile`), never one shared blob.
+
+### Invalidation — the genuinely hard part
+
+The famous quip "the two hard things are cache invalidation and naming things" is real: when a product's price changes in the DB, the cache still serves the old price until its TTL dies. The standard answers, escalating in strength:
+
+1. **Short TTLs** — accept seconds/minutes of staleness for data that tolerates it (most catalog data does).
+2. **Delete-on-write** — whenever the code updates the product, it also `DEL`s `product:42` from Redis; the next read re-fills with fresh data. Simple, and the default fresher answer.
+3. **Never cache what can't be stale** — wallet balances and permissions are read from the DB every time, or cached only with rule 2 firmly in place.
+
+### What Redis is besides a cache (name-drop level)
+
+Key-value pairs with an expiry is the core, but Redis also offers counters (`INCR` — perfect for rate limiting, Section 17), sorted sets (leaderboards), lists (simple queues), and pub/sub (live notifications between servers). Interviewers don't expect depth here; knowing it isn't "just a cache" is the signal.
+
+> [!WARNING]
+> **Traps:** (1) caching everything, including per-user sensitive responses under one shared key — users see each other's data; (2) no TTL at all ("we'll delete it when it changes" — you will forget a path); (3) caching at the wrong layer to hide a missing MongoDB index (Section 15) — cache the hot path *and* index the query, not one instead of the other.
+
+> [!NOTE]
+> **30-second interview answer:** "I use Redis as an in-memory cache in front of MongoDB with the cache-aside pattern: check Redis first, on a miss query the database and store the result with a TTL. When data changes, the write path deletes the cache key so the next read refills fresh. TTL choice is by staleness tolerance — minutes for catalog data, and never cache per-user data under a shared key."
+
+
+
+---
+
+## 📌 17. API Security Essentials — Rate Limiting, Uploads & Injection
+
+Everything in this chapter follows from Section 11's law: **anyone can call your API with anything.** These are the attacks that law invites, and the standard defences.
+
+### Rate limiting — a speed limit for your API
+
+Without one, a script can try 100,000 passwords a minute against your login, or scrape your entire catalogue. The fix counts requests per client (usually per IP or per user) and refuses past a budget:
+
+```js
+const rateLimit = require("express-rate-limit");
+
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }); // 20 tries / 15 min
+app.post("/login", loginLimiter, loginHandler);
+
+const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 100 });       // general traffic
+app.use("/api", apiLimiter);
+```
+
+Clients over the line get **429 Too Many Requests** (with a `Retry-After` header on good implementations). Two limits with two budgets is the professional shape: strict on sensitive endpoints (login, OTP, password reset), gentle elsewhere. On multiple servers the counter moves to Redis (`INCR` per key, Section 16) so all instances share one tally.
+
+### Injection — user input reaching a query as *code*
+
+**SQL injection:** string-built queries let input rewrite the query itself — the classic login bypass `' OR '1'='1`. The defence is never building queries by string concatenation; parameterized queries / ORMs treat input as *data*, always:
+
+```js
+// ❌ db.query("SELECT * FROM users WHERE email = '" + email + "'")
+// ✅ db.query("SELECT * FROM users WHERE email = ?", [email])
+```
+
+**NoSQL injection (MongoDB's version):** JSON bodies mean an attacker can send an *object* where you expected a string:
+
+```js
+// Attacker sends: { "email": "a@b.com", "password": { "$gt": "" } }
+// If req.body.password goes straight into findOne({ password }), $gt means "any non-empty password" 💥
+```
+
+Defences: validate types explicitly (Section 11 — password must be a `string` before it touches a query), and let Mongoose schema types do their casting. And **mass assignment**: spreading a raw body into `User.create({ ...req.body })` lets a caller add `"role": "admin"` to their own signup. Whitelist fields on every create/update — the same whitelist habit as Section 13's filter params.
+
+### File uploads — trust nothing about a "file"
+
+Five checks, in order, before an uploaded file touches your disk or DB:
+
+1. **Type** — verify the actual content type (magic bytes / the upload library's MIME check), never just the filename's extension: `bill.exe` renames to `bill.jpg` in one keystroke.
+2. **Size** — a hard cap (e.g., 5MB), enforced by the upload middleware, before the file lands anywhere.
+3. **Name** — generate your own filename (`invoice-<random>.pdf`); never store under the user's original name (path traversal: `../../server.js`).
+4. **Content** — images get re-encoded/resized by a library (which also strips anything weird hiding in them); documents in serious apps go through malware scanning.
+5. **Serving** — serve uploads from a separate path/domain or object storage (S3), so an uploaded file can never be *executed* as part of your app, and store only its URL in the database.
+
+Validation libraries (in Node-land: `express-validator` or a schema validator like Zod) centralise Section 11's hand-rolled `if (!email)` checks into declared rules — name one in interviews as "validation as middleware, so routes stay clean and every endpoint is guarded by the same rules."
+
+> [!WARNING]
+> **The trap answer:** "The frontend validates everything, so the API is safe." Frontend validation is a courtesy to honest users; the attacks above all bypass your frontend entirely with Postman/curl. Every defence here is server-side on purpose.
+
+> [!NOTE]
+> **30-second interview answer:** "I rate-limit sensitive endpoints like login to a small budget per window — 429 past it — and use looser limits elsewhere. Against injection I never build queries with string input: parameterized queries for SQL, explicit type validation and field whitelists for MongoDB, which also stops $gt operator injection and mass assignment. For uploads I check real content type and size, give files my own generated names, store only the URL, and serve them away from the app."
+

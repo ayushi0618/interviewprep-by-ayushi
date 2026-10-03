@@ -61,7 +61,7 @@ export default function Navbar({ route, onHome, onNotes, onProblems, onRoadmap, 
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-brand-100 shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 h-14 flex items-center gap-3">
+      <div className="page-container h-14 flex items-center gap-3">
         <button onClick={onHome} className="flex items-center gap-2.5 shrink-0 text-left" aria-label="InterviewPrep — home">
           <Logo size={34} />
           <span className="leading-tight">
@@ -84,7 +84,7 @@ export default function Navbar({ route, onHome, onNotes, onProblems, onRoadmap, 
             onFocus={() => setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
             placeholder="Search notes, problems, questions…"
-            className="w-full rounded-xl border border-brand-200 bg-[#FCFAFF] px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-400 focus:border-brand-400"
+            className="w-full rounded-xl border border-brand-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-400 focus:border-brand-400"
             aria-label="Search notes, problems and questions"
           />
           {open && results && (
@@ -118,7 +118,7 @@ export default function Navbar({ route, onHome, onNotes, onProblems, onRoadmap, 
                   <span className="flex items-center gap-2 flex-wrap">
                     <span className="text-[0.62rem] font-extrabold uppercase tracking-wide bg-brand-600 text-white px-1.5 py-0.5 rounded">Problem</span>
                     <span className="text-sm font-semibold text-slate-800">{p.title}</span>
-                    <span className={`text-[0.65rem] font-bold px-1.5 py-0.5 rounded-full border ${p.difficulty === 'Easy' ? 'bg-brand-100 text-brand-700 border-brand-200' : p.difficulty === 'Medium' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-rose-100 text-rose-700 border-rose-200'}`}>{p.difficulty}</span>
+                    <span className={`text-[0.65rem] font-bold px-1.5 py-0.5 rounded-full border ${p.difficulty === 'Easy' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : p.difficulty === 'Medium' ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-rose-100 text-rose-700 border-rose-200'}`}>{p.difficulty}</span>
                   </span>
                   <span className="block text-xs text-slate-500 truncate mt-0.5">{p.topic}</span>
                 </button>
@@ -141,8 +141,8 @@ export default function Navbar({ route, onHome, onNotes, onProblems, onRoadmap, 
         <div className="hidden md:flex items-center gap-2 shrink-0 rounded-full border border-brand-200 bg-brand-50 pl-2 pr-3 py-1" title={`${doneUnits} of ${totalUnits} chapters + problems done`}>
           <span className="relative grid place-items-center w-6 h-6">
             <svg viewBox="0 0 24 24" className="w-6 h-6 -rotate-90">
-              <circle cx="12" cy="12" r="9" fill="none" stroke="#ECE8F9" strokeWidth="3.5" />
-              <circle cx="12" cy="12" r="9" fill="none" stroke="#7C6BD9" strokeWidth="3.5" strokeLinecap="round"
+              <circle cx="12" cy="12" r="9" fill="none" stroke="#E2E8F0" strokeWidth="3.5" />
+              <circle cx="12" cy="12" r="9" fill="none" stroke="#4F46E5" strokeWidth="3.5" strokeLinecap="round"
                 strokeDasharray={`${(pct / 100) * 56.5} 56.5`} />
             </svg>
           </span>
@@ -166,7 +166,7 @@ export default function Navbar({ route, onHome, onNotes, onProblems, onRoadmap, 
       </div>
 
       {/* Mobile bottom nav — fixed bar with the new destinations */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-brand-100 shadow-[0_-4px_20px_rgba(87,68,168,0.12)]" aria-label="Mobile">
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-brand-100 shadow-[0_-4px_20px_rgba(15,23,42,0.10)]" aria-label="Mobile">
         <div className="grid grid-cols-7">
           {links.map((l) => (
             <button key={l.key} aria-label={l.label} onClick={l.onClick}

@@ -17,8 +17,8 @@ export default function Logo({ size = 36, className = '' }) {
     >
       <defs>
         <linearGradient id="ip-logo-grad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#9D8ADB" />
-          <stop offset="100%" stopColor="#7C6BD9" />
+          <stop offset="0%" stopColor="#818CF8" />
+          <stop offset="100%" stopColor="#4F46E5" />
         </linearGradient>
       </defs>
       {/* tile */}
@@ -29,9 +29,9 @@ export default function Logo({ size = 36, className = '' }) {
         fill="#ffffff"
       />
       {/* spine */}
-      <line x1="32" y1="17" x2="32" y2="48.5" stroke="#ECE8F9" strokeWidth="2" />
+      <line x1="32" y1="17" x2="32" y2="48.5" stroke="#E0E7FF" strokeWidth="2" />
       {/* </> brackets on the pages */}
-      <g stroke="#7C6BD9" strokeWidth="3.4" fill="none" strokeLinecap="round" strokeLinejoin="round">
+      <g stroke="#4F46E5" strokeWidth="3.4" fill="none" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="27,25 21,31.5 27,38" />
         <line x1="36.5" y1="24" x2="29.5" y2="40" />
         <polyline points="37,25 43,31.5 37,38" />

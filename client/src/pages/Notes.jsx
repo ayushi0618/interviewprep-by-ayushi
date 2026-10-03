@@ -88,7 +88,7 @@ export default function Notes({ slug, chapter, onSelectTopic, onSelectChapter, o
           )}
           <span className={`ml-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[0.68rem] font-extrabold ${levelTag.cls}`}>{levelTag.label}</span>
           <span className="hidden sm:inline-flex items-center rounded-full border border-brand-100 bg-brand-50 px-2 py-0.5 text-[0.68rem] font-bold text-brand-700">{topic.group}</span>
-          {topic.isNew && <span className="inline-flex items-center rounded-full bg-amber-400 px-2 py-0.5 text-[0.68rem] font-extrabold text-amber-950">NEW</span>}
+          {topic.isNew && <span className="inline-flex items-center rounded-full bg-[#0D9488] px-2 py-0.5 text-[0.68rem] font-extrabold text-white">NEW</span>}
         </nav>
 
         {/* Course progress strip */}
@@ -136,7 +136,7 @@ export default function Notes({ slug, chapter, onSelectTopic, onSelectChapter, o
                       </button>
                     )}
                     {topic.questions.length > 0 && (
-                      <button onClick={() => onMock(topic.slug)} className="ml-auto bg-amber-400 hover:bg-amber-300 text-amber-950 font-bold text-sm px-4 py-2.5 rounded-xl shadow-card transition">
+                      <button onClick={() => onMock(topic.slug)} className="btn-accent ml-auto text-sm">
                         🎤 Practice {topic.questions.length} questions
                       </button>
                     )}
@@ -206,7 +206,7 @@ export default function Notes({ slug, chapter, onSelectTopic, onSelectChapter, o
                     </>
                   )}
                   {topic.questions.length > 0 && (
-                    <button onClick={() => onMock(topic.slug)} className="ml-auto bg-amber-400 hover:bg-amber-300 text-amber-950 font-bold text-sm px-4 py-2.5 rounded-xl shadow-card transition">
+                    <button onClick={() => onMock(topic.slug)} className="btn-accent ml-auto text-sm">
                       🎤 Practice {topic.title}
                     </button>
                   )}

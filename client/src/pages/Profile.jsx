@@ -95,7 +95,7 @@ export default function Profile({ onAuth, onNotes, onSheet, onPlans, onMock, onH
   );
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 md:py-10">
+    <div className="page-container page-y">
       {/* Header */}
       <div className="bg-white rounded-3xl border border-brand-100 shadow-card p-6 md:p-8 flex flex-col md:flex-row md:items-center gap-5">
         <span className="w-20 h-20 rounded-3xl bg-brand-600 text-white grid place-items-center text-3xl font-extrabold shadow-card shrink-0">
@@ -207,10 +207,10 @@ export default function Profile({ onAuth, onNotes, onSheet, onPlans, onMock, onH
             <form onSubmit={changePassword} className="mt-3 space-y-2.5">
               <input type="password" value={curPw} onChange={(e) => setCurPw(e.target.value)} required
                 placeholder="Current password" autoComplete="current-password"
-                className="w-full rounded-xl border border-brand-200 bg-[#fbfdfc] px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-400" />
+                className="w-full rounded-xl border border-brand-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-400" />
               <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} required
                 placeholder="New password (6+ characters)" autoComplete="new-password"
-                className="w-full rounded-xl border border-brand-200 bg-[#fbfdfc] px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-400" />
+                className="w-full rounded-xl border border-brand-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-400" />
               {pwErr && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{pwErr}</p>}
               {pwMsg && <p className="text-sm font-bold text-brand-700">{pwMsg}</p>}
               <button type="submit" disabled={busy} className="btn-outline text-sm">Change password</button>

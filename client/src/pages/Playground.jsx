@@ -321,7 +321,7 @@ export default function Playground() {
     `px-4 py-2 rounded-lg text-sm font-bold transition ${active ? 'bg-brand-600 text-white shadow-card' : 'text-brand-800 hover:bg-brand-100'}`;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 md:py-10">
+    <div className="page-container page-y">
       {/* Page header */}
       <h1 className="text-3xl md:text-4xl font-extrabold text-brand-900">▶ Code Playground</h1>
       <p className="text-slate-600 mt-2 max-w-3xl leading-relaxed">

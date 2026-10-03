@@ -91,7 +91,7 @@ export default function Roadmap({ onSheet, onProblem }) {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 md:py-10">
+    <div className="page-container page-y">
       {/* Header + overall progress */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
